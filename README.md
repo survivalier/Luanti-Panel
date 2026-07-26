@@ -1,6 +1,5 @@
 # Luanti Server Panel
-====================
-Panneau web pour administrer un serveur Luanti (Minetest) depuis Termux :
+Panneau web pour administrer un serveur Luanti (Minetest) :
 - démarrer / arrêter le serveur
 - voir la console en direct + envoyer des commandes
 - gérer les mods (upload zip, clone git, suppression, activation dans world.mt)
@@ -15,3 +14,5 @@ paquets, uniquement l'état de la table des sockets du système).
 ------------------------------------------------------------------------------
 CONFIGURATION — modifie ces valeurs avant de lancer
 ------------------------------------------------------------------------------
+Changer le mot de passe depuis
+`PASSWORD = "change-moi-STP"`
