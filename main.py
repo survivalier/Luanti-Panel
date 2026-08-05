@@ -16,7 +16,6 @@ from urllib.parse import urlparse, parse_qs
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 PASSWORD = "change-moi-STP"
-PANEL_VERSION = "1.0.0"
 HOST = "0.0.0.0"
 PORT = 8877
 LUANTI_BIN = "luanti"
@@ -133,32 +132,6 @@ def download_panel_update():
     if "class Handler" not in text or "PASSWORD" not in text:
         raise RuntimeError("Le fichier téléchargé ne ressemble pas à un script de panel valide.")
     return text
-def extract_panel_version(source_text):
-    """Extrait la valeur de PANEL_VERSION depuis le code source d'un script de panel."""
-    m = re.search(r'^PANEL_VERSION\s*=\s*"([^"]*)"\s*$', source_text, re.MULTILINE)
-    if not m:
-        raise RuntimeError("Impossible de déterminer la version du fichier téléchargé.")
-    return m.group(1)
-def parse_version_tuple(v):
-    """Convertit une chaîne de version (ex: '1.2.3') en tuple d'entiers comparable.
-    Les segments non numériques sont ignorés."""
-    parts = []
-    for chunk in re.split(r"[.\-+]", v or ""):
-        m = re.match(r"\d+", chunk)
-        parts.append(int(m.group(0)) if m else 0)
-    return tuple(parts) if parts else (0,)
-def check_for_update():
-    """Compare la version locale du panel à celle disponible sur GitHub."""
-    source = download_panel_update()
-    remote_version = extract_panel_version(source)
-    local_t = parse_version_tuple(PANEL_VERSION)
-    remote_t = parse_version_tuple(remote_version)
-    return {
-        "current_version": PANEL_VERSION,
-        "remote_version": remote_version,
-        "up_to_date": remote_t <= local_t,
-        "update_available": remote_t > local_t,
-    }
 def apply_new_password(source_text, new_password):
     """Remplace la ligne PASSWORD = "..." du script téléchargé par le nouveau mot de passe choisi."""
     escaped = new_password.replace("\\", "\\\\").replace('"', '\\"')
@@ -628,13 +601,11 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 .brand{display:flex;align-items:center;gap:10px}
 .brand-icon{width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#8a5bff);display:flex;align-items:center;justify-content:center;flex-shrink:0}
 header h1{font-size:15px;margin:0;font-weight:700}
-.brand-version{font-size:10.5px;color:var(--muted);font-weight:500;margin-top:1px}
 .status-pill{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);background:var(--panel2);padding:5px 10px;border-radius:20px}
 .status-dot{width:8px;height:8px;border-radius:50%;background:var(--bad);flex-shrink:0}
 .status-dot.on{background:var(--good);box-shadow:0 0 6px var(--good)}
-.icon-btn{background:var(--panel2);border:1px solid var(--border);color:var(--muted);width:34px;height:34px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;position:relative}
+.icon-btn{background:var(--panel2);border:1px solid var(--border);color:var(--muted);width:34px;height:34px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .icon-btn:hover{color:#eee;border-color:var(--accent)}
-.update-dot{position:absolute;top:-2px;right:-2px;width:9px;height:9px;border-radius:50%;background:var(--good);border:2px solid var(--panel);display:none}
 .right-group{display:flex;align-items:center;gap:10px}
 nav{display:flex;gap:4px;padding:10px 20px;background:#11141b;overflow-x:auto;border-bottom:1px solid var(--border)}
 nav button{background:none;border:0;color:var(--muted);padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13.5px;white-space:nowrap;display:flex;align-items:center;gap:7px;font-weight:500}
@@ -759,31 +730,16 @@ input:checked + .slider:before{transform:translateX(18px)}
 .upd-spin-lg .upd-icon-lg{padding:16px;color:#fff}
 .update-progress h4{margin:0 0 8px;font-size:15px;color:#f5f5f5;font-weight:700}
 .update-progress p{margin:0;color:var(--muted);font-size:13px;line-height:1.5}
-.version-check{background:var(--panel2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:13px}
-.version-check .vc-row{display:flex;align-items:center;justify-content:space-between;padding:3px 0}
-.version-check .vc-label{color:var(--muted)}
-.version-check .vc-value{font-weight:600;font-family:ui-monospace,monospace}
-.version-check .vc-status{margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;align-items:center;gap:7px;font-weight:600}
-.version-check .vc-status.uptodate{color:var(--good)}
-.version-check .vc-status.available{color:#f0c975}
-.version-check .vc-status.error{color:var(--bad);font-weight:500}
-.version-check .vc-loading{display:flex;align-items:center;gap:8px;color:var(--muted)}
-.vc-spin{width:14px;height:14px;flex-shrink:0;animation:vcspin 1s linear infinite}
-@keyframes vcspin{to{transform:rotate(360deg)}}
 </style></head>
 <body>
 <header>
   <div class="brand">
     <div class="brand-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M6.11 0L1.76 2.516v4.478L3.638 8.08L.073 10.137v6.97L12.013 24l11.773-6.96l.14-.083v-6.672l-3.323-1.92V6.148l-1.061-.613l-1.156.774v.775l-1.11-.64v-.948c-.002-.11-.053-.182-.138-.24l-4.166-2.404a.28.28 0 0 0-.28 0l-2.62 1.515v-2.08Zm0 .64l3.41 1.966v4.297L6.11 8.867L2.312 6.676V2.834Zm6.721 2.77l3.613 2.086l-4.382 2.531a.277.277 0 0 0 0 .48l3.27 1.891l-7.2 4.07l-7.227-4.171L4.19 8.398l.684.397v2.217l1.236.715l1.239-.715V8.795l2.722-1.572V5.008Zm3.89 2.569v.466l-3.56 2.059l-.406-.234zm2.84.208l.487.282v4.33l-.496.287l-.614-.354V6.605ZM17 6.926l1.387.8v3.327l1.166.674l1.05-.61V9.006l2.77 1.6v.49L19.548 13.3l-3.381-1.951v-.944a.28.28 0 0 0-.139-.246l-2.314-1.338ZM5.429 9.113l.681.397l.686-.397v1.576l-.686.397l-.681-.397Zm-4.8 1.662l7.362 4.252c.086.05.19.051.278.002l7.343-4.154v.473l-7.76 4.386v1.43l.864.498v1.11l3.297 1.902l6.925-4.08v-1.19l1.11-.64v-1.112q1.661-.96 3.324-1.916v1.024l-2.217 1.277v.557l-1.11.638v1.11l-1.107.64v2.28l-6.93 4.095l-3.599-2.08V20.17l-1.06-.611v-1.11c-.385-.225-.773-.445-1.159-.67v-2.215l-3.324-1.92v1.11l-1.107-.64v3.325l-1.131-.652Zm15.26 1.053c1.21.697 2.402 1.392 3.604 2.082v.533l-1.107.641v1.191l-6.375 3.758l-2.742-1.582v-1.11l-.86-.495v-.787zm7.483 1.57v3.24l-3.879 2.24v-1.577l1.11-.64v-1.108l1.107-.64v-.556zM3.421 14.604l2.217 1.28v1.577l-1.446-.834l-1.879 1.086v-2.64l1.108.64zm1.32 1.392l-.138.24l.119.069l.138-.24zm.36.207l-.14.24l.12.07l.139-.24zm-.909 1.065l1.446.834l1.11.638v1.11l1.106.642v.469l-5.027-2.904Z"></path></svg></div>
-    <div>
-      <h1>Luanti Panel</h1>
-      <div class="brand-version" id="brandVersion">v…</div>
-    </div>
+    <h1>Luanti Panel</h1>
   </div>
   <div class="right-group">
     <div class="status-pill"><span class="status-dot" id="dot"></span><span id="statusText">...</span></div>
     <button class="icon-btn" onclick="openUpdateModal()" title="Mettre à jour le panel">
-      <span class="update-dot" id="updateDot"></span>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
     </button>
     <button class="icon-btn" onclick="logout()" title="Déconnexion">
@@ -964,12 +920,6 @@ input:checked + .slider:before{transform:translateX(18px)}
   <div class="modal-box">
     <div id="updateFormView">
       <h3><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Mettre à jour le panel</h3>
-      <div class="version-check" id="versionCheck">
-        <div class="vc-loading">
-          <svg class="vc-spin" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3c4.97 0 9 4.03 9 9"></path></svg>
-          Vérification de la version sur GitHub…
-        </div>
-      </div>
       <p>Ceci va arrêter le serveur Luanti, télécharger la dernière version du panel depuis GitHub, puis redémarrer. La mise à jour remplace le fichier du panel, définis donc un nouveau mot de passe de connexion.</p>
       <label for="updatePassword">Nouveau mot de passe du panel</label>
       <input type="password" id="updatePassword" placeholder="Nouveau mot de passe">
@@ -1041,15 +991,15 @@ function escapeHtml(s){
 }
 function colorizeLine(line){
   let cls = '';
-  if(/^>\s/.test(line)) cls = 'term-cmd';
-  else if(/^\[panel\]/i.test(line)) cls = 'term-panel';
+  if(/^>\\s/.test(line)) cls = 'term-cmd';
+  else if(/^\\[panel\\]/i.test(line)) cls = 'term-panel';
   else if(/\\bERROR\\b/i.test(line)) cls = 'lvl-error';
   else if(/\\bWARNING\\b/i.test(line)) cls = 'lvl-warning';
   else if(/\\bACTION\\b/i.test(line)) cls = 'lvl-action';
   else if(/\\bINFO\\b/i.test(line)) cls = 'lvl-info';
   else if(/\\bVERBOSE\\b|\\bTRACE\\b/i.test(line)) cls = 'lvl-verbose';
   let text = escapeHtml(line);
-  text = text.replace(/(\[[\w.: -]+\])/g, '<span class="term-tag">$1</span>');
+  text = text.replace(/(\\[[\\w.: -]+\\])/g, '<span class="term-tag">$1</span>');
   return cls ? `<span class="${cls}">${text}</span>` : text;
 }
 async function refreshStatus(){
@@ -1061,21 +1011,6 @@ async function refreshStatus(){
   document.getElementById('btnStart').disabled = s.running;
   document.getElementById('btnStop').disabled = !s.running;
   document.getElementById('btnRestart').disabled = !s.running;
-}
-async function loadPanelVersion(){
-  try{
-    const r = await api('/api/panel/version');
-    const d = await r.json();
-    document.getElementById('brandVersion').textContent = 'v' + d.version;
-  }catch(e){}
-}
-async function checkUpdateBadge(){
-  try{
-    const r = await api('/api/panel/check_update');
-    if(!r.ok) return;
-    const d = await r.json();
-    document.getElementById('updateDot').style.display = d.update_available ? 'block' : 'none';
-  }catch(e){}
 }
 async function startServer(){
   await withAction('Démarrage du serveur…', async ()=>{ await api('/api/start',{method:'POST'}); refreshStatus(); });
@@ -1115,7 +1050,6 @@ async function pollConsole(){
 setInterval(pollConsole, 1500);
 setInterval(refreshStatus, 4000);
 setInterval(()=>{ if(document.getElementById('tab-network').classList.contains('active')) loadNetwork(); }, 4000);
-setInterval(checkUpdateBadge, 10*60*1000);
 function renderModRow(m, indented){
   const div = document.createElement('div');
   div.className = 'mod-item' + (indented ? ' mod-item-indented' : '');
@@ -1186,7 +1120,7 @@ async function toggleModpack(pack, enabled){
   });
 }
 async function deleteModpack(pack){
-  if(!confirm('Supprimer tout le modpack "'+pack+'" et tous les mods qu\'il contient ?')) return;
+  if(!confirm('Supprimer tout le modpack "'+pack+'" et tous les mods qu\\'il contient ?')) return;
   await withAction('Suppression du modpack « '+pack+' »…', async ()=>{
     await api('/api/mods/modpack/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({modpack:pack})});
     loadMods();
@@ -1236,7 +1170,7 @@ async function loadFiles(){
   const parts = currentPath.split('/').filter(Boolean);
   let html = `<span onclick="goPath('')">${ICONS.folder}.minetest</span>`;
   let acc = '';
-  parts.forEach(p=>{ acc += (acc?'/':'')+p; html += ' / <span onclick="goPath(\''+acc+'\')">'+p+'</span>'; });
+  parts.forEach(p=>{ acc += (acc?'/':'')+p; html += ' / <span onclick="goPath(\\''+acc+'\\')">'+p+'</span>'; });
   bc.innerHTML = html;
   const el = document.getElementById('filesList');
   el.innerHTML = items.length ? '' : `<div class="empty">${ICONS.inbox}Dossier vide.</div>`;
@@ -1398,29 +1332,6 @@ function openUpdateModal(){
   errEl.style.display = 'none';
   errEl.textContent = '';
   showUpdateFormView();
-  checkUpdateVersion();
-}
-async function checkUpdateVersion(){
-  const el = document.getElementById('versionCheck');
-  el.innerHTML = `<div class="vc-loading"><svg class="vc-spin" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3c4.97 0 9 4.03 9 9"></path></svg>Vérification de la version sur GitHub…</div>`;
-  try{
-    const r = await api('/api/panel/check_update');
-    const d = await r.json();
-    if(!r.ok){
-      el.innerHTML = `<div class="vc-status error">⚠ ${d.error || 'Impossible de vérifier la version.'}</div>`;
-      return;
-    }
-    document.getElementById('updateDot').style.display = d.update_available ? 'block' : 'none';
-    const statusHtml = d.update_available
-      ? `<div class="vc-status available">🔔 Nouvelle version disponible</div>`
-      : `<div class="vc-status uptodate">✓ Le panel est à jour</div>`;
-    el.innerHTML = `
-      <div class="vc-row"><span class="vc-label">Version actuelle</span><span class="vc-value">v${d.current_version}</span></div>
-      <div class="vc-row"><span class="vc-label">Version sur GitHub</span><span class="vc-value">v${d.remote_version}</span></div>
-      ${statusHtml}`;
-  }catch(e){
-    el.innerHTML = `<div class="vc-status error">⚠ Impossible de vérifier la version (problème réseau).</div>`;
-  }
 }
 function closeUpdateModal(){
   if(updateInProgress) return;
@@ -1474,8 +1385,6 @@ async function confirmUpdate(){
   }
 }
 refreshStatus();
-loadPanelVersion();
-checkUpdateBadge();
 </script>
 </body></html>"""
 class Handler(BaseHTTPRequestHandler):
@@ -1583,15 +1492,6 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/network":
             if not self._require_auth(): return
             self._send_json(get_network_connections())
-        elif path == "/api/panel/version":
-            if not self._require_auth(): return
-            self._send_json({"version": PANEL_VERSION})
-        elif path == "/api/panel/check_update":
-            if not self._require_auth(): return
-            try:
-                self._send_json(check_for_update())
-            except Exception as e:
-                self._send_json({"error": str(e)}, 400)
         elif path == "/license":
             license_text = """MIT License
 
@@ -1794,7 +1694,7 @@ def main():
     os.makedirs(WORLD_DIR, exist_ok=True)
     os.makedirs(FILES_ROOT, exist_ok=True)
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f"Luanti Panel en écoute sur http://{HOST}:{PORT} (version {PANEL_VERSION})")
+    print(f"Luanti Panel en écoute sur http://{HOST}:{PORT}")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
