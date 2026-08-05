@@ -16,6 +16,7 @@ from urllib.parse import urlparse, parse_qs
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 PASSWORD = "change-moi-STP"
+PANEL_VERSION = "1.0.0"
 HOST = "0.0.0.0"
 PORT = 8877
 LUANTI_BIN = "luanti"
@@ -25,7 +26,7 @@ FILES_ROOT = os.path.expanduser("~/.minetest")
 CONFIG_FILE = os.path.expanduser("~/.minetest/minetest.conf")
 DEBUG_FILE = os.path.expanduser("~/.minetest/debug.txt")
 EXTRA_ARGS = ["--server", "--world", WORLD_DIR]
-SCRIPT_PATH = os.path.abspath(**file**)
+SCRIPT_PATH = os.path.abspath(__file__)
 UPDATE_URL = "https://raw.githubusercontent.com/survivalier/Luanti-Panel/refs/heads/main/main.py"
 CONSOLE_BUFFER_SIZE = 2000
 PASSWORD_HASH = hashlib.sha256(PASSWORD.encode()).hexdigest()
@@ -38,517 +39,542 @@ server_process = None
 server_lock = threading.Lock()
 server_start_time = None
 def console_push(line):
-with console_lock:
-console_buffer.append(line)
-for q in console_subscribers:
-q.append(line)
+    with console_lock:
+        console_buffer.append(line)
+        for q in console_subscribers:
+            q.append(line)
 def reader_thread(proc):
-for raw in iter(proc.stdout.readline, b""):
-try:
-line = raw.decode("utf-8", errors="replace").rstrip("\n")
-except Exception:
-line = repr(raw)
-console_push(line)
-console_push("[panel] Le processus du serveur s'est arrêté.")
+    for raw in iter(proc.stdout.readline, b""):
+        try:
+            line = raw.decode("utf-8", errors="replace").rstrip("\n")
+        except Exception:
+            line = repr(raw)
+        console_push(line)
+    console_push("[panel] Le processus du serveur s'est arrêté.")
 def start_server():
-global server_process, server_start_time
-with server_lock:
-if server_process is not None and server_process.poll() is None:
-return False, "Le serveur tourne déjà."
-cmd = [LUANTI_BIN] + EXTRA_ARGS
-try:
-server_process = subprocess.Popen(
-cmd,
-stdin=subprocess.PIPE,
-stdout=subprocess.PIPE,
-stderr=subprocess.STDOUT,
-bufsize=1,
-cwd=os.path.expanduser("~"),
-)
-except FileNotFoundError:
-return False, f"Binaire introuvable : {LUANTI_BIN}"
-server_start_time = time.time()
-t = threading.Thread(target=reader_thread, args=(server_process,), daemon=True)
-t.start()
-console_push(f"[panel] Serveur démarré (pid={server_process.pid}).")
-return True, "Serveur démarré."
+    global server_process, server_start_time
+    with server_lock:
+        if server_process is not None and server_process.poll() is None:
+            return False, "Le serveur tourne déjà."
+        cmd = [LUANTI_BIN] + EXTRA_ARGS
+        try:
+            server_process = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                bufsize=1,
+                cwd=os.path.expanduser("~"),
+            )
+        except FileNotFoundError:
+            return False, f"Binaire introuvable : {LUANTI_BIN}"
+        server_start_time = time.time()
+        t = threading.Thread(target=reader_thread, args=(server_process,), daemon=True)
+        t.start()
+        console_push(f"[panel] Serveur démarré (pid={server_process.pid}).")
+        return True, "Serveur démarré."
 def stop_server():
-global server_process
-with server_lock:
-if server_process is None or server_process.poll() is not None:
-return False, "Le serveur n'est pas en cours d'exécution."
-try:
-server_process.stdin.write(b"/shutdown\n")
-server_process.stdin.flush()
-except Exception:
-pass
-try:
-server_process.wait(timeout=10)
-except subprocess.TimeoutExpired:
-server_process.terminate()
-try:
-server_process.wait(timeout=5)
-except subprocess.TimeoutExpired:
-server_process.kill()
-console_push("[panel] Serveur arrêté.")
-return True, "Serveur arrêté."
+    global server_process
+    with server_lock:
+        if server_process is None or server_process.poll() is not None:
+            return False, "Le serveur n'est pas en cours d'exécution."
+        try:
+            server_process.stdin.write(b"/shutdown\n")
+            server_process.stdin.flush()
+        except Exception:
+            pass
+        try:
+            server_process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            server_process.terminate()
+            try:
+                server_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                server_process.kill()
+        console_push("[panel] Serveur arrêté.")
+        return True, "Serveur arrêté."
 def restart_server():
-with server_lock:
-running = server_process is not None and server_process.poll() is None
-if running:
-stop_server()
-return start_server()
+    with server_lock:
+        running = server_process is not None and server_process.poll() is None
+    if running:
+        stop_server()
+    return start_server()
 def server_status():
-with server_lock:
-running = server_process is not None and server_process.poll() is None
-pid = server_process.pid if running else None
-uptime = int(time.time() - server_start_time) if running and server_start_time else 0
-return {"running": running, "pid": pid, "uptime": uptime}
+    with server_lock:
+        running = server_process is not None and server_process.poll() is None
+        pid = server_process.pid if running else None
+        uptime = int(time.time() - server_start_time) if running and server_start_time else 0
+        return {"running": running, "pid": pid, "uptime": uptime}
 def send_command(cmd_text):
-with server_lock:
-if server_process is None or server_process.poll() is not None:
-return False, "Le serveur n'est pas en cours d'exécution."
-try:
-server_process.stdin.write((cmd_text + "\n").encode("utf-8"))
-server_process.stdin.flush()
-console_push(f"> {cmd_text}")
-return True, "Commande envoyée."
-except Exception as e:
-return False, str(e)
+    with server_lock:
+        if server_process is None or server_process.poll() is not None:
+            return False, "Le serveur n'est pas en cours d'exécution."
+        try:
+            server_process.stdin.write((cmd_text + "\n").encode("utf-8"))
+            server_process.stdin.flush()
+            console_push(f"> {cmd_text}")
+            return True, "Commande envoyée."
+        except Exception as e:
+            return False, str(e)
 def download_panel_update():
-"""Télécharge la dernière version du script du panel depuis GitHub."""
-req = Request(UPDATE_URL, headers={"User-Agent": "LuantiPanel-Updater"})
-try:
-with urlopen(req, timeout=30) as resp:
-data = resp.read()
-except HTTPError as e:
-raise RuntimeError(f"Échec du téléchargement (HTTP {e.code}).")
-except URLError as e:
-raise RuntimeError(f"Échec du téléchargement : {e.reason}")
-try:
-text = data.decode("utf-8")
-except UnicodeDecodeError:
-raise RuntimeError("Le fichier téléchargé n'est pas un script texte valide.")
-if "class Handler" not in text or "PASSWORD" not in text:
-raise RuntimeError("Le fichier téléchargé ne ressemble pas à un script de panel valide.")
-return text
+    """Télécharge la dernière version du script du panel depuis GitHub."""
+    req = Request(UPDATE_URL, headers={"User-Agent": "LuantiPanel-Updater"})
+    try:
+        with urlopen(req, timeout=30) as resp:
+            data = resp.read()
+    except HTTPError as e:
+        raise RuntimeError(f"Échec du téléchargement (HTTP {e.code}).")
+    except URLError as e:
+        raise RuntimeError(f"Échec du téléchargement : {e.reason}")
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise RuntimeError("Le fichier téléchargé n'est pas un script texte valide.")
+    if "class Handler" not in text or "PASSWORD" not in text:
+        raise RuntimeError("Le fichier téléchargé ne ressemble pas à un script de panel valide.")
+    return text
+def extract_panel_version(source_text):
+    """Extrait la valeur de PANEL_VERSION depuis le code source d'un script de panel."""
+    m = re.search(r'^PANEL_VERSION\s*=\s*"([^"]*)"\s*$', source_text, re.MULTILINE)
+    if not m:
+        raise RuntimeError("Impossible de déterminer la version du fichier téléchargé.")
+    return m.group(1)
+def parse_version_tuple(v):
+    """Convertit une chaîne de version (ex: '1.2.3') en tuple d'entiers comparable.
+    Les segments non numériques sont ignorés."""
+    parts = []
+    for chunk in re.split(r"[.\-+]", v or ""):
+        m = re.match(r"\d+", chunk)
+        parts.append(int(m.group(0)) if m else 0)
+    return tuple(parts) if parts else (0,)
+def check_for_update():
+    """Compare la version locale du panel à celle disponible sur GitHub."""
+    source = download_panel_update()
+    remote_version = extract_panel_version(source)
+    local_t = parse_version_tuple(PANEL_VERSION)
+    remote_t = parse_version_tuple(remote_version)
+    return {
+        "current_version": PANEL_VERSION,
+        "remote_version": remote_version,
+        "up_to_date": remote_t <= local_t,
+        "update_available": remote_t > local_t,
+    }
 def apply_new_password(source_text, new_password):
-"""Remplace la ligne PASSWORD = "..." du script téléchargé par le nouveau mot de passe choisi."""
-escaped = new_password.replace("\", "\\").replace('"', '\"')
-pattern = re.compile(r'^PASSWORD\s*=\s*".*"\s*$', re.MULTILINE)
-if not pattern.search(source_text):
-raise ValueError("Impossible de localiser la ligne PASSWORD dans le nouveau fichier.")
-return pattern.sub(f'PASSWORD = "{escaped}"', source_text, count=1)
+    """Remplace la ligne PASSWORD = "..." du script téléchargé par le nouveau mot de passe choisi."""
+    escaped = new_password.replace("\\", "\\\\").replace('"', '\\"')
+    pattern = re.compile(r'^PASSWORD\s*=\s*".*"\s*$', re.MULTILINE)
+    if not pattern.search(source_text):
+        raise ValueError("Impossible de localiser la ligne PASSWORD dans le nouveau fichier.")
+    return pattern.sub(f'PASSWORD = "{escaped}"', source_text, count=1)
 def write_panel_source(new_source):
-"""Sauvegarde l'ancien script puis écrit la nouvelle version sur disque."""
-backup_path = SCRIPT_PATH + ".bak"
-try:
-shutil.copy2(SCRIPT_PATH, backup_path)
-except OSError:
-pass
-tmp_path = SCRIPT_PATH + ".new"
-with open(tmp_path, "w", encoding="utf-8") as f:
-f.write(new_source)
-os.replace(tmp_path, SCRIPT_PATH)
+    """Sauvegarde l'ancien script puis écrit la nouvelle version sur disque."""
+    backup_path = SCRIPT_PATH + ".bak"
+    try:
+        shutil.copy2(SCRIPT_PATH, backup_path)
+    except OSError:
+        pass
+    tmp_path = SCRIPT_PATH + ".new"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        f.write(new_source)
+    os.replace(tmp_path, SCRIPT_PATH)
 def schedule_panel_restart(delay=0.6):
-"""Relance le processus du panel (re-exec) après un court délai, pour laisser
-le temps à la réponse HTTP de mise à jour d'être envoyée au navigateur."""
-def *do_restart():
-time.sleep(delay)
-console_push("[panel] Redémarrage du panel après mise à jour…")
-os.execv(sys.executable, [sys.executable] + sys.argv)
-threading.Thread(target=*do_restart, daemon=True).start()
+    """Relance le processus du panel (re-exec) après un court délai, pour laisser
+    le temps à la réponse HTTP de mise à jour d'être envoyée au navigateur."""
+    def _do_restart():
+        time.sleep(delay)
+        console_push("[panel] Redémarrage du panel après mise à jour…")
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+    threading.Thread(target=_do_restart, daemon=True).start()
 def safe_mod_path(relfolder):
-"""Empêche toute évasion du dossier MODS_DIR (path traversal).
-Accepte soit un mod autonome ("mymod"), soit un sous-mod d'un modpack
-("modpack/submod") — jamais plus d'un niveau d'imbrication."""
-relfolder = (relfolder or "").strip().strip("/")
-parts = [p for p in relfolder.split("/") if p]
-if not parts or len(parts) > 2 or any(p in (".", "..") for p in parts):
-raise ValueError("Nom de mod invalide.")
-full = os.path.normpath(os.path.join(MODS_DIR, *parts))
-base = os.path.normpath(MODS_DIR)
-if full != base and not full.startswith(base + os.sep):
-raise ValueError("Chemin invalide.")
-return full
+    """Empêche toute évasion du dossier MODS_DIR (path traversal).
+    Accepte soit un mod autonome ("mymod"), soit un sous-mod d'un modpack
+    ("modpack/submod") — jamais plus d'un niveau d'imbrication."""
+    relfolder = (relfolder or "").strip().strip("/")
+    parts = [p for p in relfolder.split("/") if p]
+    if not parts or len(parts) > 2 or any(p in (".", "..") for p in parts):
+        raise ValueError("Nom de mod invalide.")
+    full = os.path.normpath(os.path.join(MODS_DIR, *parts))
+    base = os.path.normpath(MODS_DIR)
+    if full != base and not full.startswith(base + os.sep):
+        raise ValueError("Chemin invalide.")
+    return full
 def world_mt_path():
-return os.path.join(WORLD_DIR, "world.mt")
+    return os.path.join(WORLD_DIR, "world.mt")
 def read_world_mt():
-path = world_mt_path()
-lines = []
-if os.path.exists(path):
-with open(path, "r", encoding="utf-8", errors="replace") as f:
-lines = f.read().splitlines()
-return lines
+    path = world_mt_path()
+    lines = []
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.read().splitlines()
+    return lines
 def write_world_mt(lines):
-os.makedirs(WORLD_DIR, exist_ok=True)
-with open(world_mt_path(), "w", encoding="utf-8") as f:
-f.write("\n".join(lines) + "\n")
+    os.makedirs(WORLD_DIR, exist_ok=True)
+    with open(world_mt_path(), "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
 def get_enabled_mods():
-"""Retourne {nom_technique_du_mod: bool activé}.
-Dans world.mt, un mod est considéré activé dès que sa valeur n'est pas
-"false" — pour un mod autonome la valeur est "true", mais pour un mod
-faisant partie d'un modpack, Luanti stocke plutôt son chemin relatif,
-ex: load_mod_nations_chat = mods/nationsmod/nations_chat
-"""
-enabled = {}
-for line in read_world_mt():
-m = re.match(r"^\s*load_mod*(.+?)\s*=\s*(.*)$", line)
-if m:
-val = m.group(2).strip()
-enabled[m.group(1)] = val != "" and val.lower() != "false"
-return enabled
+    """Retourne {nom_technique_du_mod: bool activé}.
+    Dans world.mt, un mod est considéré activé dès que sa valeur n'est pas
+    "false" — pour un mod autonome la valeur est "true", mais pour un mod
+    faisant partie d'un modpack, Luanti stocke plutôt son chemin relatif,
+    ex: load_mod_nations_chat = mods/nationsmod/nations_chat
+    """
+    enabled = {}
+    for line in read_world_mt():
+        m = re.match(r"^\s*load_mod_(.+?)\s*=\s*(.*)$", line)
+        if m:
+            val = m.group(2).strip()
+            enabled[m.group(1)] = val != "" and val.lower() != "false"
+    return enabled
 def set_mod_enabled(modname, enabled, rel_path=None):
-"""Active/désactive un mod dans world.mt.
-rel_path (ex: "mods/nationsmod/nations_chat") doit être fourni pour un
-mod appartenant à un modpack ; sinon la valeur "true" est utilisée."""
-lines = read_world_mt()
-key = f"load_mod*{modname}"
-new_value = (rel_path if rel_path else "true") if enabled else "false"
-found = False
-new_lines = []
-for line in lines:
-m = re.match(rf"^\s*{re.escape(key)}\s*=", line, re.IGNORECASE)
-if m:
-new_lines.append(f"{key} = {new_value}")
-found = True
-else:
-new_lines.append(line)
-if not found:
-new_lines.append(f"{key} = {new_value}")
-write_world_mt(new_lines)
+    """Active/désactive un mod dans world.mt.
+    rel_path (ex: "mods/nationsmod/nations_chat") doit être fourni pour un
+    mod appartenant à un modpack ; sinon la valeur "true" est utilisée."""
+    lines = read_world_mt()
+    key = f"load_mod_{modname}"
+    new_value = (rel_path if rel_path else "true") if enabled else "false"
+    found = False
+    new_lines = []
+    for line in lines:
+        m = re.match(rf"^\s*{re.escape(key)}\s*=", line, re.IGNORECASE)
+        if m:
+            new_lines.append(f"{key} = {new_value}")
+            found = True
+        else:
+            new_lines.append(line)
+    if not found:
+        new_lines.append(f"{key} = {new_value}")
+    write_world_mt(new_lines)
 def is_modpack_dir(path):
-return os.path.isfile(os.path.join(path, "modpack.conf")) or os.path.isfile(os.path.join(path, "modpack.txt"))
+    return os.path.isfile(os.path.join(path, "modpack.conf")) or os.path.isfile(os.path.join(path, "modpack.txt"))
 def is_mod_dir(path):
-return os.path.isfile(os.path.join(path, "init.lua")) or os.path.isfile(os.path.join(path, "mod.conf"))
+    return os.path.isfile(os.path.join(path, "init.lua")) or os.path.isfile(os.path.join(path, "mod.conf"))
 def mod_technical_name(path, fallback):
-"""Lit le nom déclaré dans mod.conf (name = ...) si présent, sinon
-retombe sur le nom du dossier."""
-conf = os.path.join(path, "mod.conf")
-if os.path.isfile(conf):
-try:
-with open(conf, "r", encoding="utf-8", errors="replace") as f:
-for line in f:
-m = re.match(r"^\s*name\s*=\s*(.+?)\s*$", line)
-if m:
-return m.group(1)
-except OSError:
-pass
-return fallback
+    """Lit le nom déclaré dans mod.conf (name = ...) si présent, sinon
+    retombe sur le nom du dossier."""
+    conf = os.path.join(path, "mod.conf")
+    if os.path.isfile(conf):
+        try:
+            with open(conf, "r", encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    m = re.match(r"^\s*name\s*=\s*(.+?)\s*$", line)
+                    if m:
+                        return m.group(1)
+        except OSError:
+            pass
+    return fallback
 def list_mods():
-os.makedirs(MODS_DIR, exist_ok=True)
-enabled_map = get_enabled_mods()
-mods = []
-for entry in sorted(os.listdir(MODS_DIR)):
-full = os.path.join(MODS_DIR, entry)
-if not os.path.isdir(full) or entry.startswith("*tmp*"):
-continue
-if is_modpack_dir(full):
-for sub in sorted(os.listdir(full)):
-subfull = os.path.join(full, sub)
-if not os.path.isdir(subfull) or not is_mod_dir(subfull):
-continue
-techname = mod_technical_name(subfull, sub)
-mods.append({
-"name": techname,
-"folder": f"{entry}/{sub}",
-"modpack": entry,
-"enabled": enabled_map.get(techname, False),
-"size": dir_size(subfull),
-})
-elif is_mod_dir(full):
-techname = mod_technical_name(full, entry)
-mods.append({
-"name": techname,
-"folder": entry,
-"modpack": None,
-"enabled": enabled_map.get(techname, False),
-"size": dir_size(full),
-})
-return mods
+    os.makedirs(MODS_DIR, exist_ok=True)
+    enabled_map = get_enabled_mods()
+    mods = []
+    for entry in sorted(os.listdir(MODS_DIR)):
+        full = os.path.join(MODS_DIR, entry)
+        if not os.path.isdir(full) or entry.startswith("_tmp_"):
+            continue
+        if is_modpack_dir(full):
+            for sub in sorted(os.listdir(full)):
+                subfull = os.path.join(full, sub)
+                if not os.path.isdir(subfull) or not is_mod_dir(subfull):
+                    continue
+                techname = mod_technical_name(subfull, sub)
+                mods.append({
+                    "name": techname,
+                    "folder": f"{entry}/{sub}",
+                    "modpack": entry,
+                    "enabled": enabled_map.get(techname, False),
+                    "size": dir_size(subfull),
+                })
+        elif is_mod_dir(full):
+            techname = mod_technical_name(full, entry)
+            mods.append({
+                "name": techname,
+                "folder": entry,
+                "modpack": None,
+                "enabled": enabled_map.get(techname, False),
+                "size": dir_size(full),
+            })
+    return mods
 def toggle_modpack(modpack_name, enabled):
-"""Active ou désactive tous les mods d'un modpack en une seule fois."""
-full = safe_mod_path(modpack_name)
-if not os.path.isdir(full) or not is_modpack_dir(full):
-raise ValueError("Modpack introuvable.")
-for sub in sorted(os.listdir(full)):
-subfull = os.path.join(full, sub)
-if not os.path.isdir(subfull) or not is_mod_dir(subfull):
-continue
-techname = mod_technical_name(subfull, sub)
-rel_path = f"mods/{modpack_name}/{sub}"
-set_mod_enabled(techname, enabled, rel_path if enabled else None)
+    """Active ou désactive tous les mods d'un modpack en une seule fois."""
+    full = safe_mod_path(modpack_name)
+    if not os.path.isdir(full) or not is_modpack_dir(full):
+        raise ValueError("Modpack introuvable.")
+    for sub in sorted(os.listdir(full)):
+        subfull = os.path.join(full, sub)
+        if not os.path.isdir(subfull) or not is_mod_dir(subfull):
+            continue
+        techname = mod_technical_name(subfull, sub)
+        rel_path = f"mods/{modpack_name}/{sub}"
+        set_mod_enabled(techname, enabled, rel_path if enabled else None)
 def delete_modpack(modpack_name):
-"""Supprime un modpack entier (dossier + toutes ses entrées world.mt)."""
-full = safe_mod_path(modpack_name)
-if not os.path.isdir(full) or not is_modpack_dir(full):
-raise ValueError("Modpack introuvable.")
-technames = []
-for sub in sorted(os.listdir(full)):
-subfull = os.path.join(full, sub)
-if os.path.isdir(subfull) and is_mod_dir(subfull):
-technames.append(mod_technical_name(subfull, sub))
-shutil.rmtree(full)
-if technames:
-pattern = re.compile(
-r"^\s*load_mod_(" + "|".join(re.escape(t) for t in technames) + r")\s*=",
-re.IGNORECASE,
-)
-lines = [l for l in read_world_mt() if not pattern.match(l)]
-write_world_mt(lines)
+    """Supprime un modpack entier (dossier + toutes ses entrées world.mt)."""
+    full = safe_mod_path(modpack_name)
+    if not os.path.isdir(full) or not is_modpack_dir(full):
+        raise ValueError("Modpack introuvable.")
+    technames = []
+    for sub in sorted(os.listdir(full)):
+        subfull = os.path.join(full, sub)
+        if os.path.isdir(subfull) and is_mod_dir(subfull):
+            technames.append(mod_technical_name(subfull, sub))
+    shutil.rmtree(full)
+    if technames:
+        pattern = re.compile(
+            r"^\s*load_mod_(" + "|".join(re.escape(t) for t in technames) + r")\s*=",
+            re.IGNORECASE,
+        )
+        lines = [l for l in read_world_mt() if not pattern.match(l)]
+        write_world_mt(lines)
 def dir_size(path):
-total = 0
-for dirpath, *, filenames in os.walk(path):
-for f in filenames:
-try:
-total += os.path.getsize(os.path.join(dirpath, f))
-except OSError:
-pass
-return total
+    total = 0
+    for dirpath, _, filenames in os.walk(path):
+        for f in filenames:
+            try:
+                total += os.path.getsize(os.path.join(dirpath, f))
+            except OSError:
+                pass
+    return total
 def delete_mod(relfolder, technical_name):
-full = safe_mod_path(relfolder)
-if os.path.isdir(full):
-shutil.rmtree(full)
-key = f"load_mod*{technical_name}"
-lines = [l for l in read_world_mt() if not re.match(rf"^\s*{re.escape(key)}\s*=", l, re.IGNORECASE)]
-write_world_mt(lines)
+    full = safe_mod_path(relfolder)
+    if os.path.isdir(full):
+        shutil.rmtree(full)
+    key = f"load_mod_{technical_name}"
+    lines = [l for l in read_world_mt() if not re.match(rf"^\s*{re.escape(key)}\s*=", l, re.IGNORECASE)]
+    write_world_mt(lines)
 def install_mod_from_git(url):
-os.makedirs(MODS_DIR, exist_ok=True)
-name = os.path.splitext(os.path.basename(urlparse(url).path.rstrip("/")))[0]
-if not name:
-name = f"mod_{secrets.token_hex(4)}"
-dest = safe_mod_path(name)
-if os.path.exists(dest):
-dest = dest + "*" + secrets.token_hex(3)
-proc = subprocess.run(
-["git", "clone", "--depth", "1", url, dest],
-capture_output=True, text=True, timeout=120
-)
-if proc.returncode != 0:
-raise RuntimeError(proc.stderr.strip() or "Échec du clonage git.")
-return os.path.basename(dest)
+    os.makedirs(MODS_DIR, exist_ok=True)
+    name = os.path.splitext(os.path.basename(urlparse(url).path.rstrip("/")))[0]
+    if not name:
+        name = f"mod_{secrets.token_hex(4)}"
+    dest = safe_mod_path(name)
+    if os.path.exists(dest):
+        dest = dest + "_" + secrets.token_hex(3)
+    proc = subprocess.run(
+        ["git", "clone", "--depth", "1", url, dest],
+        capture_output=True, text=True, timeout=120
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.strip() or "Échec du clonage git.")
+    return os.path.basename(dest)
 def install_mod_from_zip(filename, data):
-os.makedirs(MODS_DIR, exist_ok=True)
-tmp_dir = os.path.join(MODS_DIR, "*tmp*" + secrets.token_hex(4))
-os.makedirs(tmp_dir, exist_ok=True)
-try:
-with zipfile.ZipFile(io.BytesIO(data)) as z:
-for member in z.namelist():
-# empêche l'évasion via zip malicieux
-norm = os.path.normpath(member)
-if norm.startswith("..") or os.path.isabs(norm):
-raise ValueError("Archive suspecte (chemin invalide).")
-z.extractall(tmp_dir)
-entries = [e for e in os.listdir(tmp_dir) if not e.startswith(".")]
-if len(entries) == 1 and os.path.isdir(os.path.join(tmp_dir, entries[0])):
-modname = entries[0]
-src = os.path.join(tmp_dir, entries[0])
-else:
-modname = os.path.splitext(filename)[0]
-src = tmp_dir
-dest = safe_mod_path(modname)
-if os.path.exists(dest):
-dest = dest + "*" + secrets.token_hex(3)
-modname = os.path.basename(dest)
-shutil.move(src, dest)
-return modname
-finally:
-if os.path.exists(tmp_dir):
-shutil.rmtree(tmp_dir, ignore_errors=True)
+    os.makedirs(MODS_DIR, exist_ok=True)
+    tmp_dir = os.path.join(MODS_DIR, "_tmp_" + secrets.token_hex(4))
+    os.makedirs(tmp_dir, exist_ok=True)
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            for member in z.namelist():
+                # empêche l'évasion via zip malicieux
+                norm = os.path.normpath(member)
+                if norm.startswith("..") or os.path.isabs(norm):
+                    raise ValueError("Archive suspecte (chemin invalide).")
+            z.extractall(tmp_dir)
+        entries = [e for e in os.listdir(tmp_dir) if not e.startswith(".")]
+        if len(entries) == 1 and os.path.isdir(os.path.join(tmp_dir, entries[0])):
+            modname = entries[0]
+            src = os.path.join(tmp_dir, entries[0])
+        else:
+            modname = os.path.splitext(filename)[0]
+            src = tmp_dir
+        dest = safe_mod_path(modname)
+        if os.path.exists(dest):
+            dest = dest + "_" + secrets.token_hex(3)
+            modname = os.path.basename(dest)
+        shutil.move(src, dest)
+        return modname
+    finally:
+        if os.path.exists(tmp_dir):
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 CONFIG_FIELDS = [
-{"key": "port", "label": "Port", "type": "number", "default": "30000",
-"desc": "Port réseau sur lequel le serveur écoute les connexions des joueurs."},
-{"key": "server_name", "label": "Nom du serveur", "type": "text", "default": "Mon serveur Luanti",
-"desc": "Nom affiché dans la liste des serveurs publics et en jeu."},
-{"key": "server_description", "label": "Description", "type": "text", "default": "",
-"desc": "Courte description affichée dans la liste des serveurs."},
-{"key": "motd", "label": "Message du jour (MOTD)", "type": "text", "default": "",
-"desc": "Message affiché aux joueurs à leur connexion."},
-{"key": "max_users", "label": "Joueurs max", "type": "number", "default": "15",
-"desc": "Nombre maximum de joueurs connectés simultanément."},
-{"key": "default_privs", "label": "Privilèges par défaut", "type": "text", "default": "interact, shout",
-"desc": "Privilèges accordés automatiquement à un nouveau joueur (ex: interact, shout, fly)."},
-{"key": "creative_mode", "label": "Mode créatif", "type": "bool", "default": "false",
-"desc": "Active l'inventaire créatif illimité pour tous les joueurs."},
-{"key": "enable_damage", "label": "Dégâts activés", "type": "bool", "default": "true",
-"desc": "Active les dégâts (chute, faim, mobs, etc.)."},
-{"key": "enable_pvp", "label": "PvP activé", "type": "bool", "default": "false",
-"desc": "Autorise les joueurs à se blesser entre eux."},
-{"key": "disallow_empty_password", "label": "Interdire mot de passe vide", "type": "bool", "default": "true",
-"desc": "Empêche la connexion avec un mot de passe de compte vide."},
-{"key": "strict_protocol_version_checking", "label": "Vérification stricte du protocole", "type": "bool", "default": "false",
-"desc": "Rejette les clients dont la version de protocole ne correspond pas exactement."},
-{"key": "static_spawnpoint", "label": "Point d'apparition fixe", "type": "text", "default": "",
-"desc": "Coordonnées fixes d'apparition, format x,y,z (vide = aléatoire)."},
-{"key": "max_block_send_distance", "label": "Distance d'envoi des blocs", "type": "number", "default": "10",
-"desc": "Distance (en mapblocks) de terrain envoyée aux joueurs. Impacte les perfs réseau."},
-{"key": "active_block_range", "label": "Portée des blocs actifs", "type": "number", "default": "4",
-"desc": "Distance dans laquelle les blocs sont simulés activement (mobs, cultures, etc.)."},
-{"key": "time_speed", "label": "Vitesse du temps", "type": "number", "default": "72",
-"desc": "Vitesse d'écoulement du cycle jour/nuit (72 = 1 jour réel = 20 min)."},
-{"key": "kick_msg_crash", "label": "Message de kick en cas de crash", "type": "text", "default": "",
-"desc": "Message affiché aux joueurs si le serveur plante et les déconnecte."},
+    {"key": "port", "label": "Port", "type": "number", "default": "30000",
+     "desc": "Port réseau sur lequel le serveur écoute les connexions des joueurs."},
+    {"key": "server_name", "label": "Nom du serveur", "type": "text", "default": "Mon serveur Luanti",
+     "desc": "Nom affiché dans la liste des serveurs publics et en jeu."},
+    {"key": "server_description", "label": "Description", "type": "text", "default": "",
+     "desc": "Courte description affichée dans la liste des serveurs."},
+    {"key": "motd", "label": "Message du jour (MOTD)", "type": "text", "default": "",
+     "desc": "Message affiché aux joueurs à leur connexion."},
+    {"key": "max_users", "label": "Joueurs max", "type": "number", "default": "15",
+     "desc": "Nombre maximum de joueurs connectés simultanément."},
+    {"key": "default_privs", "label": "Privilèges par défaut", "type": "text", "default": "interact, shout",
+     "desc": "Privilèges accordés automatiquement à un nouveau joueur (ex: interact, shout, fly)."},
+    {"key": "creative_mode", "label": "Mode créatif", "type": "bool", "default": "false",
+     "desc": "Active l'inventaire créatif illimité pour tous les joueurs."},
+    {"key": "enable_damage", "label": "Dégâts activés", "type": "bool", "default": "true",
+     "desc": "Active les dégâts (chute, faim, mobs, etc.)."},
+    {"key": "enable_pvp", "label": "PvP activé", "type": "bool", "default": "false",
+     "desc": "Autorise les joueurs à se blesser entre eux."},
+    {"key": "disallow_empty_password", "label": "Interdire mot de passe vide", "type": "bool", "default": "true",
+     "desc": "Empêche la connexion avec un mot de passe de compte vide."},
+    {"key": "strict_protocol_version_checking", "label": "Vérification stricte du protocole", "type": "bool", "default": "false",
+     "desc": "Rejette les clients dont la version de protocole ne correspond pas exactement."},
+    {"key": "static_spawnpoint", "label": "Point d'apparition fixe", "type": "text", "default": "",
+     "desc": "Coordonnées fixes d'apparition, format x,y,z (vide = aléatoire)."},
+    {"key": "max_block_send_distance", "label": "Distance d'envoi des blocs", "type": "number", "default": "10",
+     "desc": "Distance (en mapblocks) de terrain envoyée aux joueurs. Impacte les perfs réseau."},
+    {"key": "active_block_range", "label": "Portée des blocs actifs", "type": "number", "default": "4",
+     "desc": "Distance dans laquelle les blocs sont simulés activement (mobs, cultures, etc.)."},
+    {"key": "time_speed", "label": "Vitesse du temps", "type": "number", "default": "72",
+     "desc": "Vitesse d'écoulement du cycle jour/nuit (72 = 1 jour réel = 20 min)."},
+    {"key": "kick_msg_crash", "label": "Message de kick en cas de crash", "type": "text", "default": "",
+     "desc": "Message affiché aux joueurs si le serveur plante et les déconnecte."},
 ]
 def read_conf_raw():
-if not os.path.exists(CONFIG_FILE):
-return ""
-with open(CONFIG_FILE, "r", encoding="utf-8", errors="replace") as f:
-return f.read()
+    if not os.path.exists(CONFIG_FILE):
+        return ""
+    with open(CONFIG_FILE, "r", encoding="utf-8", errors="replace") as f:
+        return f.read()
 def write_conf_raw(text):
-os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
-with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-f.write(text)
+    os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+        f.write(text)
 def parse_conf(text):
-values = {}
-for line in text.splitlines():
-stripped = line.strip()
-if not stripped or stripped.startswith("#"):
-continue
-m = re.match(r"^([A-Za-z0-9_.[]]+)\s*=\s*(.*)$", stripped)
-if m:
-values[m.group(1)] = m.group(2).strip()
-return values
+    values = {}
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        m = re.match(r"^([A-Za-z0-9_.\[\]]+)\s*=\s*(.*)$", stripped)
+        if m:
+            values[m.group(1)] = m.group(2).strip()
+    return values
 def update_conf_keys(updates):
-"""Met à jour ou ajoute des clés dans minetest.conf sans toucher au reste du fichier."""
-raw = read_conf_raw()
-lines = raw.splitlines() if raw else []
-remaining = dict(updates)
-new_lines = []
-for line in lines:
-stripped = line.strip()
-m = re.match(r"^#?\s*([A-Za-z0-9_.[]]+)\s*=", stripped)
-if m and m.group(1) in remaining:
-key = m.group(1)
-new_lines.append(f"{key} = {remaining.pop(key)}")
-else:
-new_lines.append(line)
-for key, val in remaining.items():
-new_lines.append(f"{key} = {val}")
-write_conf_raw("\n".join(new_lines) + "\n")
+    """Met à jour ou ajoute des clés dans minetest.conf sans toucher au reste du fichier."""
+    raw = read_conf_raw()
+    lines = raw.splitlines() if raw else []
+    remaining = dict(updates)
+    new_lines = []
+    for line in lines:
+        stripped = line.strip()
+        m = re.match(r"^#?\s*([A-Za-z0-9_.\[\]]+)\s*=", stripped)
+        if m and m.group(1) in remaining:
+            key = m.group(1)
+            new_lines.append(f"{key} = {remaining.pop(key)}")
+        else:
+            new_lines.append(line)
+    for key, val in remaining.items():
+        new_lines.append(f"{key} = {val}")
+    write_conf_raw("\n".join(new_lines) + "\n")
 def get_config_view():
-raw = read_conf_raw()
-parsed = parse_conf(raw)
-fields = []
-for f in CONFIG_FIELDS:
-fields.append({**f, "value": parsed.get(f["key"], f["default"])})
-return {"fields": fields, "raw": raw}
+    raw = read_conf_raw()
+    parsed = parse_conf(raw)
+    fields = []
+    for f in CONFIG_FIELDS:
+        fields.append({**f, "value": parsed.get(f["key"], f["default"])})
+    return {"fields": fields, "raw": raw}
 def get_server_port():
-parsed = parse_conf(read_conf_raw())
-return parsed.get("port", "30000")
+    parsed = parse_conf(read_conf_raw())
+    return parsed.get("port", "30000")
 def tail_text_file(path, max_lines=500, max_bytes=400_000):
-if not os.path.exists(path):
-return []
-size = os.path.getsize(path)
-read_size = min(size, max_bytes)
-with open(path, "rb") as f:
-f.seek(size - read_size)
-data = f.read()
-text = data.decode("utf-8", errors="replace")
-lines = text.splitlines()
-return lines[-max_lines:]
+    if not os.path.exists(path):
+        return []
+    size = os.path.getsize(path)
+    read_size = min(size, max_bytes)
+    with open(path, "rb") as f:
+        f.seek(size - read_size)
+        data = f.read()
+    text = data.decode("utf-8", errors="replace")
+    lines = text.splitlines()
+    return lines[-max_lines:]
 def clear_debug_file():
-os.makedirs(os.path.dirname(DEBUG_FILE), exist_ok=True)
-with open(DEBUG_FILE, "w", encoding="utf-8"):
-pass
+    os.makedirs(os.path.dirname(DEBUG_FILE), exist_ok=True)
+    with open(DEBUG_FILE, "w", encoding="utf-8"):
+        pass
 def _parse_ss_output(output, port):
-conns = []
-port_suffix = ":" + str(port)
-for line in output.splitlines()[1:]:
-parts = line.split()
-if len(parts) < 6:
-continue
-netid, state, recvq, sendq, local, peer = parts[0], parts[1], parts[2], parts[3], parts[4], parts[5]
-if not local.endswith(port_suffix):
-continue
-peer_display = None if peer in ("*:*", "0.0.0.0:*", "[::]:*") else peer
-conns.append({"proto": netid, "state": state, "local": local, "peer": peer_display,
-"recv_q": recvq, "send_q": sendq})
-return conns
+    conns = []
+    port_suffix = ":" + str(port)
+    for line in output.splitlines()[1:]:
+        parts = line.split()
+        if len(parts) < 6:
+            continue
+        netid, state, recvq, sendq, local, peer = parts[0], parts[1], parts[2], parts[3], parts[4], parts[5]
+        if not local.endswith(port_suffix):
+            continue
+        peer_display = None if peer in ("*:*", "0.0.0.0:*", "[::]:*") else peer
+        conns.append({"proto": netid, "state": state, "local": local, "peer": peer_display,
+                       "recv_q": recvq, "send_q": sendq})
+    return conns
 def _parse_netstat_output(output, port):
-conns = []
-port_suffix = ":" + str(port)
-for line in output.splitlines():
-if not (line.startswith("tcp") or line.startswith("udp")):
-continue
-parts = line.split()
-if len(parts) < 5:
-continue
-proto, recvq, sendq, local, peer = parts[0], parts[1], parts[2], parts[3], parts[4]
-state = parts[5] if len(parts) > 5 else ""
-if not local.endswith(port_suffix):
-continue
-peer_display = None if peer in ("*:*", "0.0.0.0:*", "[::]:*") else peer
-conns.append({"proto": proto, "state": state, "local": local, "peer": peer_display,
-"recv_q": recvq, "send_q": sendq})
-return conns
+    conns = []
+    port_suffix = ":" + str(port)
+    for line in output.splitlines():
+        if not (line.startswith("tcp") or line.startswith("udp")):
+            continue
+        parts = line.split()
+        if len(parts) < 5:
+            continue
+        proto, recvq, sendq, local, peer = parts[0], parts[1], parts[2], parts[3], parts[4]
+        state = parts[5] if len(parts) > 5 else ""
+        if not local.endswith(port_suffix):
+            continue
+        peer_display = None if peer in ("*:*", "0.0.0.0:*", "[::]:*") else peer
+        conns.append({"proto": proto, "state": state, "local": local, "peer": peer_display,
+                       "recv_q": recvq, "send_q": sendq})
+    return conns
 def get_network_connections():
-port = get_server_port()
-if shutil.which("ss"):
-try:
-proc = subprocess.run(["ss", "-tuna"], capture_output=True, text=True, timeout=5)
-return {"port": port, "tool": "ss", "connections": _parse_ss_output(proc.stdout, port), "error": None}
-except Exception as e:
-return {"port": port, "tool": "ss", "connections": [], "error": str(e)}
-if shutil.which("netstat"):
-try:
-proc = subprocess.run(["netstat", "-tuna"], capture_output=True, text=True, timeout=5)
-return {"port": port, "tool": "netstat", "connections": _parse_netstat_output(proc.stdout, port), "error": None}
-except Exception as e:
-return {"port": port, "tool": "netstat", "connections": [], "error": str(e)}
-return {"port": port, "tool": None, "connections": [],
-"error": "Aucun outil réseau trouvé. Installe-le avec : pkg install iproute2"}
+    port = get_server_port()
+    if shutil.which("ss"):
+        try:
+            proc = subprocess.run(["ss", "-tuna"], capture_output=True, text=True, timeout=5)
+            return {"port": port, "tool": "ss", "connections": _parse_ss_output(proc.stdout, port), "error": None}
+        except Exception as e:
+            return {"port": port, "tool": "ss", "connections": [], "error": str(e)}
+    if shutil.which("netstat"):
+        try:
+            proc = subprocess.run(["netstat", "-tuna"], capture_output=True, text=True, timeout=5)
+            return {"port": port, "tool": "netstat", "connections": _parse_netstat_output(proc.stdout, port), "error": None}
+        except Exception as e:
+            return {"port": port, "tool": "netstat", "connections": [], "error": str(e)}
+    return {"port": port, "tool": None, "connections": [],
+            "error": "Aucun outil réseau trouvé. Installe-le avec : pkg install iproute2"}
 def safe_rel_path(rel):
-rel = (rel or "").strip().lstrip("/")
-full = os.path.normpath(os.path.join(FILES_ROOT, rel))
-base = os.path.normpath(FILES_ROOT)
-if full != base and not full.startswith(base + os.sep):
-raise ValueError("Chemin invalide.")
-return full
+    rel = (rel or "").strip().lstrip("/")
+    full = os.path.normpath(os.path.join(FILES_ROOT, rel))
+    base = os.path.normpath(FILES_ROOT)
+    if full != base and not full.startswith(base + os.sep):
+        raise ValueError("Chemin invalide.")
+    return full
 def list_dir(rel):
-full = safe_rel_path(rel)
-if not os.path.isdir(full):
-raise ValueError("Dossier introuvable.")
-items = []
-for entry in sorted(os.listdir(full)):
-p = os.path.join(full, entry)
-items.append({
-"name": entry,
-"is_dir": os.path.isdir(p),
-"size": os.path.getsize(p) if os.path.isfile(p) else 0,
-})
-return items
+    full = safe_rel_path(rel)
+    if not os.path.isdir(full):
+        raise ValueError("Dossier introuvable.")
+    items = []
+    for entry in sorted(os.listdir(full)):
+        p = os.path.join(full, entry)
+        items.append({
+            "name": entry,
+            "is_dir": os.path.isdir(p),
+            "size": os.path.getsize(p) if os.path.isfile(p) else 0,
+        })
+    return items
 def parse_multipart(body, content_type):
-m = re.search(r'boundary=(?:"([^"]+)"|([^;]+))', content_type)
-if not m:
-raise ValueError("boundary manquant")
-boundary = (m.group(1) or m.group(2)).strip().encode()
-delim = b"--" + boundary
-parts = body.split(delim)
-fields = {}
-files = {}
-for part in parts:
-if part in (b"", b"--\r\n", b"--"):
-continue
-part = part.strip(b"\r\n")
-if not part:
-continue
-header_end = part.find(b"\r\n\r\n")
-if header_end == -1:
-continue
-raw_headers = part[:header_end].decode("utf-8", errors="replace")
-content = part[header_end + 4:]
-cd = re.search(r'name="([^"]*)"(?:; filename="([^"]*)")?', raw_headers)
-if not cd:
-continue
-field_name = cd.group(1)
-filename = cd.group(2)
-if filename is not None:
-files[field_name] = (filename, content)
-else:
-fields[field_name] = content.decode("utf-8", errors="replace")
-return fields, files
+    m = re.search(r'boundary=(?:"([^"]+)"|([^;]+))', content_type)
+    if not m:
+        raise ValueError("boundary manquant")
+    boundary = (m.group(1) or m.group(2)).strip().encode()
+    delim = b"--" + boundary
+    parts = body.split(delim)
+    fields = {}
+    files = {}
+    for part in parts:
+        if part in (b"", b"--\r\n", b"--"):
+            continue
+        part = part.strip(b"\r\n")
+        if not part:
+            continue
+        header_end = part.find(b"\r\n\r\n")
+        if header_end == -1:
+            continue
+        raw_headers = part[:header_end].decode("utf-8", errors="replace")
+        content = part[header_end + 4:]
+        cd = re.search(r'name="([^"]*)"(?:; filename="([^"]*)")?', raw_headers)
+        if not cd:
+            continue
+        field_name = cd.group(1)
+        filename = cd.group(2)
+        if filename is not None:
+            files[field_name] = (filename, content)
+        else:
+            fields[field_name] = content.decode("utf-8", errors="replace")
+    return fields, files
 LOGIN_PAGE = """<!DOCTYPE html>
-
 <html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Luanti Panel — Connexion</title>
 <style>
@@ -602,11 +628,13 @@ header{display:flex;align-items:center;justify-content:space-between;padding:14p
 .brand{display:flex;align-items:center;gap:10px}
 .brand-icon{width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#8a5bff);display:flex;align-items:center;justify-content:center;flex-shrink:0}
 header h1{font-size:15px;margin:0;font-weight:700}
+.brand-version{font-size:10.5px;color:var(--muted);font-weight:500;margin-top:1px}
 .status-pill{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);background:var(--panel2);padding:5px 10px;border-radius:20px}
 .status-dot{width:8px;height:8px;border-radius:50%;background:var(--bad);flex-shrink:0}
 .status-dot.on{background:var(--good);box-shadow:0 0 6px var(--good)}
-.icon-btn{background:var(--panel2);border:1px solid var(--border);color:var(--muted);width:34px;height:34px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.icon-btn{background:var(--panel2);border:1px solid var(--border);color:var(--muted);width:34px;height:34px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;position:relative}
 .icon-btn:hover{color:#eee;border-color:var(--accent)}
+.update-dot{position:absolute;top:-2px;right:-2px;width:9px;height:9px;border-radius:50%;background:var(--good);border:2px solid var(--panel);display:none}
 .right-group{display:flex;align-items:center;gap:10px}
 nav{display:flex;gap:4px;padding:10px 20px;background:#11141b;overflow-x:auto;border-bottom:1px solid var(--border)}
 nav button{background:none;border:0;color:var(--muted);padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13.5px;white-space:nowrap;display:flex;align-items:center;gap:7px;font-weight:500}
@@ -731,16 +759,31 @@ input:checked + .slider:before{transform:translateX(18px)}
 .upd-spin-lg .upd-icon-lg{padding:16px;color:#fff}
 .update-progress h4{margin:0 0 8px;font-size:15px;color:#f5f5f5;font-weight:700}
 .update-progress p{margin:0;color:var(--muted);font-size:13px;line-height:1.5}
+.version-check{background:var(--panel2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:13px}
+.version-check .vc-row{display:flex;align-items:center;justify-content:space-between;padding:3px 0}
+.version-check .vc-label{color:var(--muted)}
+.version-check .vc-value{font-weight:600;font-family:ui-monospace,monospace}
+.version-check .vc-status{margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;align-items:center;gap:7px;font-weight:600}
+.version-check .vc-status.uptodate{color:var(--good)}
+.version-check .vc-status.available{color:#f0c975}
+.version-check .vc-status.error{color:var(--bad);font-weight:500}
+.version-check .vc-loading{display:flex;align-items:center;gap:8px;color:var(--muted)}
+.vc-spin{width:14px;height:14px;flex-shrink:0;animation:vcspin 1s linear infinite}
+@keyframes vcspin{to{transform:rotate(360deg)}}
 </style></head>
 <body>
 <header>
   <div class="brand">
     <div class="brand-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M6.11 0L1.76 2.516v4.478L3.638 8.08L.073 10.137v6.97L12.013 24l11.773-6.96l.14-.083v-6.672l-3.323-1.92V6.148l-1.061-.613l-1.156.774v.775l-1.11-.64v-.948c-.002-.11-.053-.182-.138-.24l-4.166-2.404a.28.28 0 0 0-.28 0l-2.62 1.515v-2.08Zm0 .64l3.41 1.966v4.297L6.11 8.867L2.312 6.676V2.834Zm6.721 2.77l3.613 2.086l-4.382 2.531a.277.277 0 0 0 0 .48l3.27 1.891l-7.2 4.07l-7.227-4.171L4.19 8.398l.684.397v2.217l1.236.715l1.239-.715V8.795l2.722-1.572V5.008Zm3.89 2.569v.466l-3.56 2.059l-.406-.234zm2.84.208l.487.282v4.33l-.496.287l-.614-.354V6.605ZM17 6.926l1.387.8v3.327l1.166.674l1.05-.61V9.006l2.77 1.6v.49L19.548 13.3l-3.381-1.951v-.944a.28.28 0 0 0-.139-.246l-2.314-1.338ZM5.429 9.113l.681.397l.686-.397v1.576l-.686.397l-.681-.397Zm-4.8 1.662l7.362 4.252c.086.05.19.051.278.002l7.343-4.154v.473l-7.76 4.386v1.43l.864.498v1.11l3.297 1.902l6.925-4.08v-1.19l1.11-.64v-1.112q1.661-.96 3.324-1.916v1.024l-2.217 1.277v.557l-1.11.638v1.11l-1.107.64v2.28l-6.93 4.095l-3.599-2.08V20.17l-1.06-.611v-1.11c-.385-.225-.773-.445-1.159-.67v-2.215l-3.324-1.92v1.11l-1.107-.64v3.325l-1.131-.652Zm15.26 1.053c1.21.697 2.402 1.392 3.604 2.082v.533l-1.107.641v1.191l-6.375 3.758l-2.742-1.582v-1.11l-.86-.495v-.787zm7.483 1.57v3.24l-3.879 2.24v-1.577l1.11-.64v-1.108l1.107-.64v-.556zM3.421 14.604l2.217 1.28v1.577l-1.446-.834l-1.879 1.086v-2.64l1.108.64zm1.32 1.392l-.138.24l.119.069l.138-.24zm.36.207l-.14.24l.12.07l.139-.24zm-.909 1.065l1.446.834l1.11.638v1.11l1.106.642v.469l-5.027-2.904Z"></path></svg></div>
-    <h1>Luanti Panel</h1>
+    <div>
+      <h1>Luanti Panel</h1>
+      <div class="brand-version" id="brandVersion">v…</div>
+    </div>
   </div>
   <div class="right-group">
     <div class="status-pill"><span class="status-dot" id="dot"></span><span id="statusText">...</span></div>
     <button class="icon-btn" onclick="openUpdateModal()" title="Mettre à jour le panel">
+      <span class="update-dot" id="updateDot"></span>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
     </button>
     <button class="icon-btn" onclick="logout()" title="Déconnexion">
@@ -921,6 +964,12 @@ input:checked + .slider:before{transform:translateX(18px)}
   <div class="modal-box">
     <div id="updateFormView">
       <h3><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Mettre à jour le panel</h3>
+      <div class="version-check" id="versionCheck">
+        <div class="vc-loading">
+          <svg class="vc-spin" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3c4.97 0 9 4.03 9 9"></path></svg>
+          Vérification de la version sur GitHub…
+        </div>
+      </div>
       <p>Ceci va arrêter le serveur Luanti, télécharger la dernière version du panel depuis GitHub, puis redémarrer. La mise à jour remplace le fichier du panel, définis donc un nouveau mot de passe de connexion.</p>
       <label for="updatePassword">Nouveau mot de passe du panel</label>
       <input type="password" id="updatePassword" placeholder="Nouveau mot de passe">
@@ -992,15 +1041,15 @@ function escapeHtml(s){
 }
 function colorizeLine(line){
   let cls = '';
-  if(/^>\\s/.test(line)) cls = 'term-cmd';
-  else if(/^\\[panel\\]/i.test(line)) cls = 'term-panel';
+  if(/^>\s/.test(line)) cls = 'term-cmd';
+  else if(/^\[panel\]/i.test(line)) cls = 'term-panel';
   else if(/\\bERROR\\b/i.test(line)) cls = 'lvl-error';
   else if(/\\bWARNING\\b/i.test(line)) cls = 'lvl-warning';
   else if(/\\bACTION\\b/i.test(line)) cls = 'lvl-action';
   else if(/\\bINFO\\b/i.test(line)) cls = 'lvl-info';
   else if(/\\bVERBOSE\\b|\\bTRACE\\b/i.test(line)) cls = 'lvl-verbose';
   let text = escapeHtml(line);
-  text = text.replace(/(\\[[\\w.: -]+\\])/g, '<span class="term-tag">$1</span>');
+  text = text.replace(/(\[[\w.: -]+\])/g, '<span class="term-tag">$1</span>');
   return cls ? `<span class="${cls}">${text}</span>` : text;
 }
 async function refreshStatus(){
@@ -1012,6 +1061,21 @@ async function refreshStatus(){
   document.getElementById('btnStart').disabled = s.running;
   document.getElementById('btnStop').disabled = !s.running;
   document.getElementById('btnRestart').disabled = !s.running;
+}
+async function loadPanelVersion(){
+  try{
+    const r = await api('/api/panel/version');
+    const d = await r.json();
+    document.getElementById('brandVersion').textContent = 'v' + d.version;
+  }catch(e){}
+}
+async function checkUpdateBadge(){
+  try{
+    const r = await api('/api/panel/check_update');
+    if(!r.ok) return;
+    const d = await r.json();
+    document.getElementById('updateDot').style.display = d.update_available ? 'block' : 'none';
+  }catch(e){}
 }
 async function startServer(){
   await withAction('Démarrage du serveur…', async ()=>{ await api('/api/start',{method:'POST'}); refreshStatus(); });
@@ -1051,6 +1115,7 @@ async function pollConsole(){
 setInterval(pollConsole, 1500);
 setInterval(refreshStatus, 4000);
 setInterval(()=>{ if(document.getElementById('tab-network').classList.contains('active')) loadNetwork(); }, 4000);
+setInterval(checkUpdateBadge, 10*60*1000);
 function renderModRow(m, indented){
   const div = document.createElement('div');
   div.className = 'mod-item' + (indented ? ' mod-item-indented' : '');
@@ -1121,7 +1186,7 @@ async function toggleModpack(pack, enabled){
   });
 }
 async function deleteModpack(pack){
-  if(!confirm('Supprimer tout le modpack "'+pack+'" et tous les mods qu\\'il contient ?')) return;
+  if(!confirm('Supprimer tout le modpack "'+pack+'" et tous les mods qu\'il contient ?')) return;
   await withAction('Suppression du modpack « '+pack+' »…', async ()=>{
     await api('/api/mods/modpack/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({modpack:pack})});
     loadMods();
@@ -1171,7 +1236,7 @@ async function loadFiles(){
   const parts = currentPath.split('/').filter(Boolean);
   let html = `<span onclick="goPath('')">${ICONS.folder}.minetest</span>`;
   let acc = '';
-  parts.forEach(p=>{ acc += (acc?'/':'')+p; html += ' / <span onclick="goPath(\\''+acc+'\\')">'+p+'</span>'; });
+  parts.forEach(p=>{ acc += (acc?'/':'')+p; html += ' / <span onclick="goPath(\''+acc+'\')">'+p+'</span>'; });
   bc.innerHTML = html;
   const el = document.getElementById('filesList');
   el.innerHTML = items.length ? '' : `<div class="empty">${ICONS.inbox}Dossier vide.</div>`;
@@ -1333,6 +1398,29 @@ function openUpdateModal(){
   errEl.style.display = 'none';
   errEl.textContent = '';
   showUpdateFormView();
+  checkUpdateVersion();
+}
+async function checkUpdateVersion(){
+  const el = document.getElementById('versionCheck');
+  el.innerHTML = `<div class="vc-loading"><svg class="vc-spin" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3c4.97 0 9 4.03 9 9"></path></svg>Vérification de la version sur GitHub…</div>`;
+  try{
+    const r = await api('/api/panel/check_update');
+    const d = await r.json();
+    if(!r.ok){
+      el.innerHTML = `<div class="vc-status error">⚠ ${d.error || 'Impossible de vérifier la version.'}</div>`;
+      return;
+    }
+    document.getElementById('updateDot').style.display = d.update_available ? 'block' : 'none';
+    const statusHtml = d.update_available
+      ? `<div class="vc-status available">🔔 Nouvelle version disponible</div>`
+      : `<div class="vc-status uptodate">✓ Le panel est à jour</div>`;
+    el.innerHTML = `
+      <div class="vc-row"><span class="vc-label">Version actuelle</span><span class="vc-value">v${d.current_version}</span></div>
+      <div class="vc-row"><span class="vc-label">Version sur GitHub</span><span class="vc-value">v${d.remote_version}</span></div>
+      ${statusHtml}`;
+  }catch(e){
+    el.innerHTML = `<div class="vc-status error">⚠ Impossible de vérifier la version (problème réseau).</div>`;
+  }
 }
 function closeUpdateModal(){
   if(updateInProgress) return;
@@ -1386,6 +1474,8 @@ async function confirmUpdate(){
   }
 }
 refreshStatus();
+loadPanelVersion();
+checkUpdateBadge();
 </script>
 </body></html>"""
 class Handler(BaseHTTPRequestHandler):
@@ -1493,217 +1583,223 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/network":
             if not self._require_auth(): return
             self._send_json(get_network_connections())
+        elif path == "/api/panel/version":
+            if not self._require_auth(): return
+            self._send_json({"version": PANEL_VERSION})
+        elif path == "/api/panel/check_update":
+            if not self._require_auth(): return
+            try:
+                self._send_json(check_for_update())
+            except Exception as e:
+                self._send_json({"error": str(e)}, 400)
         elif path == "/license":
             license_text = """MIT License
 
-```
-    Copyright (c) 2026 Survivalier
+        Copyright (c) 2026 Survivalier
 
-    Permission is hereby granted, free of charge, to any person obtaining a copy
-    of this software and associated documentation files (the "Software"), to deal
-    in the Software without restriction, including without limitation the rights
-    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-    copies of the Software, and to permit persons to whom the Software is
-    furnished to do so, subject to the following conditions:
+        Permission is hereby granted, free of charge, to any person obtaining a copy
+        of this software and associated documentation files (the "Software"), to deal
+        in the Software without restriction, including without limitation the rights
+        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the Software is
+        furnished to do so, subject to the following conditions:
 
-    The above copyright notice and this permission notice shall be included in all
-    copies or substantial portions of the Software.
+        The above copyright notice and this permission notice shall be included in all
+        copies or substantial portions of the Software.
 
-    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-    SOFTWARE."""
-        body = license_text.encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-    else:
-        self._send_json({"error": "not found"}, 404)
-def do_POST(self):
-    parsed = urlparse(self.path)
-    path = parsed.path
-    if path == "/api/login":
-        data = self._get_json()
-        pw = data.get("password", "")
-        if hashlib.sha256(pw.encode()).hexdigest() == PASSWORD_HASH:
-            token = secrets.token_hex(32)
-            SESSIONS[token] = time.time() + SESSION_DURATION
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        SOFTWARE."""
+            body = license_text.encode("utf-8")
             self.send_response(200)
-            self.send_header("Set-Cookie", f"session={token}; Path=/; HttpOnly; SameSite=Strict")
-            self.send_header("Content-Length", "0")
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
             self.end_headers()
+            self.wfile.write(body)
         else:
-            time.sleep(1.0)
-            self._send_json({"error": "invalid"}, 401)
-        return
-    if path == "/api/logout":
-        token = self._get_cookie("session")
-        SESSIONS.pop(token, None)
-        self._send_json({"ok": True})
-        return
-    if not self._require_auth():
-        return
-    if path == "/api/start":
-        ok, msg = start_server()
-        self._send_json({"ok": ok, "message": msg})
-    elif path == "/api/stop":
-        ok, msg = stop_server()
-        self._send_json({"ok": ok, "message": msg})
-    elif path == "/api/restart":
-        ok, msg = restart_server()
-        self._send_json({"ok": ok, "message": msg})
-    elif path == "/api/command":
-        data = self._get_json()
-        ok, msg = send_command(data.get("cmd", ""))
-        self._send_json({"ok": ok, "message": msg})
-    elif path == "/api/mods/toggle":
-        data = self._get_json()
-        try:
-            folder = data["folder"]
-            name = data["name"]
-            enabled = bool(data["enabled"])
-            rel_path = f"mods/{folder}" if "/" in folder else None
-            set_mod_enabled(name, enabled, rel_path)
-            self._send_json({"ok": True})
-        except Exception as e:
-            self._send_json({"error": str(e)}, 400)
-    elif path == "/api/mods/delete":
-        data = self._get_json()
-        try:
-            delete_mod(data["folder"], data["name"])
-            self._send_json({"ok": True})
-        except Exception as e:
-            self._send_json({"error": str(e)}, 400)
-    elif path == "/api/mods/modpack/toggle":
-        data = self._get_json()
-        try:
-            toggle_modpack(data["modpack"], bool(data["enabled"]))
-            self._send_json({"ok": True})
-        except Exception as e:
-            self._send_json({"error": str(e)}, 400)
-    elif path == "/api/mods/modpack/delete":
-        data = self._get_json()
-        try:
-            delete_modpack(data["modpack"])
-            self._send_json({"ok": True})
-        except Exception as e:
-            self._send_json({"error": str(e)}, 400)
-    elif path == "/api/mods/git":
-        data = self._get_json()
-        try:
-            name = install_mod_from_git(data["url"])
-            self._send_json({"ok": True, "name": name})
-        except Exception as e:
-            self._send_json({"error": str(e)}, 400)
-    elif path == "/api/mods/upload":
-        try:
-            ct = self.headers.get("Content-Type", "")
-            body = self._read_body()
-            fields, files = parse_multipart(body, ct)
-            if "file" not in files:
-                raise ValueError("Aucun fichier reçu.")
-            filename, content = files["file"]
-            name = install_mod_from_zip(filename, content)
-            self._send_json({"ok": True, "name": name})
-        except Exception as e:
-            self._send_json({"error": str(e)}, 400)
-    elif path == "/api/files/upload":
-        try:
-            ct = self.headers.get("Content-Type", "")
-            body = self._read_body()
-            fields, files = parse_multipart(body, ct)
-            if "file" not in files:
-                raise ValueError("Aucun fichier reçu.")
-            filename, content = files["file"]
-            target_dir = safe_rel_path(fields.get("path", ""))
-            os.makedirs(target_dir, exist_ok=True)
-            dest = os.path.join(target_dir, os.path.basename(filename))
-            with open(dest, "wb") as f:
-                f.write(content)
-            self._send_json({"ok": True})
-        except Exception as e:
-            self._send_json({"error": str(e)}, 400)
-    elif path == "/api/files/delete":
-        data = self._get_json()
-        try:
-            full = safe_rel_path(data["path"])
-            if os.path.isdir(full):
-                shutil.rmtree(full)
-            elif os.path.isfile(full):
-                os.remove(full)
-            self._send_json({"ok": True})
-        except Exception as e:
-            self._send_json({"error": str(e)}, 400)
-    elif path == "/api/files/mkdir":
-        data = self._get_json()
-        try:
-            full = safe_rel_path(data["path"])
-            os.makedirs(full, exist_ok=True)
-            self._send_json({"ok": True})
-        except Exception as e:
-            self._send_json({"error": str(e)}, 400)
-    elif path == "/api/config":
-        data = self._get_json()
-        try:
-            fields = data.get("fields", {})
-            update_conf_keys(fields)
-            self._send_json({"ok": True})
-        except Exception as e:
-            self._send_json({"error": str(e)}, 400)
-    elif path == "/api/config/raw":
-        data = self._get_json()
-        try:
-            write_conf_raw(data.get("raw", ""))
-            self._send_json({"ok": True})
-        except Exception as e:
-            self._send_json({"error": str(e)}, 400)
-    elif path == "/api/debug/clear":
-        try:
-            clear_debug_file()
-            self._send_json({"ok": True})
-        except Exception as e:
-            self._send_json({"error": str(e)}, 400)
-    elif path == "/api/panel/update":
-        data = self._get_json()
-        new_password = data.get("password", "")
-        if not isinstance(new_password, str) or len(new_password) < 4:
-            self._send_json({"error": "Mot de passe invalide (4 caractères minimum)."}, 400)
+            self._send_json({"error": "not found"}, 404)
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+        if path == "/api/login":
+            data = self._get_json()
+            pw = data.get("password", "")
+            if hashlib.sha256(pw.encode()).hexdigest() == PASSWORD_HASH:
+                token = secrets.token_hex(32)
+                SESSIONS[token] = time.time() + SESSION_DURATION
+                self.send_response(200)
+                self.send_header("Set-Cookie", f"session={token}; Path=/; HttpOnly; SameSite=Strict")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+            else:
+                time.sleep(1.0)
+                self._send_json({"error": "invalid"}, 401)
             return
-        try:
-            stop_server()
-        except Exception:
-            pass
-        try:
-            source = download_panel_update()
-            new_source = apply_new_password(source, new_password)
-            write_panel_source(new_source)
-        except Exception as e:
-            self._send_json({"error": str(e)}, 400)
+        if path == "/api/logout":
+            token = self._get_cookie("session")
+            SESSIONS.pop(token, None)
+            self._send_json({"ok": True})
             return
-        self._send_json({"ok": True})
-        schedule_panel_restart()
-    else:
-        self._send_json({"error": "not found"}, 404)
-```
-
+        if not self._require_auth():
+            return
+        if path == "/api/start":
+            ok, msg = start_server()
+            self._send_json({"ok": ok, "message": msg})
+        elif path == "/api/stop":
+            ok, msg = stop_server()
+            self._send_json({"ok": ok, "message": msg})
+        elif path == "/api/restart":
+            ok, msg = restart_server()
+            self._send_json({"ok": ok, "message": msg})
+        elif path == "/api/command":
+            data = self._get_json()
+            ok, msg = send_command(data.get("cmd", ""))
+            self._send_json({"ok": ok, "message": msg})
+        elif path == "/api/mods/toggle":
+            data = self._get_json()
+            try:
+                folder = data["folder"]
+                name = data["name"]
+                enabled = bool(data["enabled"])
+                rel_path = f"mods/{folder}" if "/" in folder else None
+                set_mod_enabled(name, enabled, rel_path)
+                self._send_json({"ok": True})
+            except Exception as e:
+                self._send_json({"error": str(e)}, 400)
+        elif path == "/api/mods/delete":
+            data = self._get_json()
+            try:
+                delete_mod(data["folder"], data["name"])
+                self._send_json({"ok": True})
+            except Exception as e:
+                self._send_json({"error": str(e)}, 400)
+        elif path == "/api/mods/modpack/toggle":
+            data = self._get_json()
+            try:
+                toggle_modpack(data["modpack"], bool(data["enabled"]))
+                self._send_json({"ok": True})
+            except Exception as e:
+                self._send_json({"error": str(e)}, 400)
+        elif path == "/api/mods/modpack/delete":
+            data = self._get_json()
+            try:
+                delete_modpack(data["modpack"])
+                self._send_json({"ok": True})
+            except Exception as e:
+                self._send_json({"error": str(e)}, 400)
+        elif path == "/api/mods/git":
+            data = self._get_json()
+            try:
+                name = install_mod_from_git(data["url"])
+                self._send_json({"ok": True, "name": name})
+            except Exception as e:
+                self._send_json({"error": str(e)}, 400)
+        elif path == "/api/mods/upload":
+            try:
+                ct = self.headers.get("Content-Type", "")
+                body = self._read_body()
+                fields, files = parse_multipart(body, ct)
+                if "file" not in files:
+                    raise ValueError("Aucun fichier reçu.")
+                filename, content = files["file"]
+                name = install_mod_from_zip(filename, content)
+                self._send_json({"ok": True, "name": name})
+            except Exception as e:
+                self._send_json({"error": str(e)}, 400)
+        elif path == "/api/files/upload":
+            try:
+                ct = self.headers.get("Content-Type", "")
+                body = self._read_body()
+                fields, files = parse_multipart(body, ct)
+                if "file" not in files:
+                    raise ValueError("Aucun fichier reçu.")
+                filename, content = files["file"]
+                target_dir = safe_rel_path(fields.get("path", ""))
+                os.makedirs(target_dir, exist_ok=True)
+                dest = os.path.join(target_dir, os.path.basename(filename))
+                with open(dest, "wb") as f:
+                    f.write(content)
+                self._send_json({"ok": True})
+            except Exception as e:
+                self._send_json({"error": str(e)}, 400)
+        elif path == "/api/files/delete":
+            data = self._get_json()
+            try:
+                full = safe_rel_path(data["path"])
+                if os.path.isdir(full):
+                    shutil.rmtree(full)
+                elif os.path.isfile(full):
+                    os.remove(full)
+                self._send_json({"ok": True})
+            except Exception as e:
+                self._send_json({"error": str(e)}, 400)
+        elif path == "/api/files/mkdir":
+            data = self._get_json()
+            try:
+                full = safe_rel_path(data["path"])
+                os.makedirs(full, exist_ok=True)
+                self._send_json({"ok": True})
+            except Exception as e:
+                self._send_json({"error": str(e)}, 400)
+        elif path == "/api/config":
+            data = self._get_json()
+            try:
+                fields = data.get("fields", {})
+                update_conf_keys(fields)
+                self._send_json({"ok": True})
+            except Exception as e:
+                self._send_json({"error": str(e)}, 400)
+        elif path == "/api/config/raw":
+            data = self._get_json()
+            try:
+                write_conf_raw(data.get("raw", ""))
+                self._send_json({"ok": True})
+            except Exception as e:
+                self._send_json({"error": str(e)}, 400)
+        elif path == "/api/debug/clear":
+            try:
+                clear_debug_file()
+                self._send_json({"ok": True})
+            except Exception as e:
+                self._send_json({"error": str(e)}, 400)
+        elif path == "/api/panel/update":
+            data = self._get_json()
+            new_password = data.get("password", "")
+            if not isinstance(new_password, str) or len(new_password) < 4:
+                self._send_json({"error": "Mot de passe invalide (4 caractères minimum)."}, 400)
+                return
+            try:
+                stop_server()
+            except Exception:
+                pass
+            try:
+                source = download_panel_update()
+                new_source = apply_new_password(source, new_password)
+                write_panel_source(new_source)
+            except Exception as e:
+                self._send_json({"error": str(e)}, 400)
+                return
+            self._send_json({"ok": True})
+            schedule_panel_restart()
+        else:
+            self._send_json({"error": "not found"}, 404)
 def main():
-if PASSWORD == "change-moi-STP":
-print("!! ATTENTION : change la variable PASSWORD en haut du fichier avant usage.")
-os.makedirs(MODS_DIR, exist_ok=True)
-os.makedirs(WORLD_DIR, exist_ok=True)
-os.makedirs(FILES_ROOT, exist_ok=True)
-httpd = ThreadingHTTPServer((HOST, PORT), Handler)
-print(f"Luanti Panel en écoute sur http://{HOST}:{PORT}")
-try:
-httpd.serve_forever()
-except KeyboardInterrupt:
-print("\nArrêt du panneau.")
-if server_process is not None and server_process.poll() is None:
-stop_server()
-if **name** == "**main**":
-main()
+    if PASSWORD == "change-moi-STP":
+        print("!! ATTENTION : change la variable PASSWORD en haut du fichier avant usage.")
+    os.makedirs(MODS_DIR, exist_ok=True)
+    os.makedirs(WORLD_DIR, exist_ok=True)
+    os.makedirs(FILES_ROOT, exist_ok=True)
+    httpd = ThreadingHTTPServer((HOST, PORT), Handler)
+    print(f"Luanti Panel en écoute sur http://{HOST}:{PORT} (version {PANEL_VERSION})")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\nArrêt du panneau.")
+        if server_process is not None and server_process.poll() is None:
+            stop_server()
+if __name__ == "__main__":
+    main()
