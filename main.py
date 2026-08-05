@@ -636,6 +636,33 @@ input:checked + .slider:before{transform:translateX(18px)}
 .net-stat{background:var(--panel2);border-radius:10px;padding:10px 16px;min-width:110px}
 .net-stat .n{font-size:20px;font-weight:700;color:#f0f0f0}
 .net-stat .l{font-size:11.5px;color:var(--muted)}
+#console {
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: #777 transparent;
+}
+#console::-webkit-scrollbar {
+    width: 5px;
+}
+#console::-webkit-scrollbar-track {
+    background: transparent;
+}
+#console::-webkit-scrollbar-thumb {
+    background: #777;
+    border-radius: 999px;
+}
+#console::-webkit-scrollbar-thumb:hover {
+    background: #999;
+}
+#console::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+}
+#console::-webkit-scrollbar-corner {
+    background: transparent;
+}
 </style></head>
 <body>
 <header>
