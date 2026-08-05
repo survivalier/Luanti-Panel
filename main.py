@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
-PASSWORD = "Survivalier14."
+PASSWORD = "change-moi-STP"
 HOST = "0.0.0.0"
 PORT = 8877
 LUANTI_BIN = "luanti"
