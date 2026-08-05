@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
-PASSWORD = "change-moi-STP"
+PASSWORD = "Survivalier14."
 HOST = "0.0.0.0"
 PORT = 8877
 LUANTI_BIN = "luanti"
@@ -1403,12 +1403,28 @@ let licenseLang = "en";
 async function loadLicense() {
   const content = document.getElementById("licenseContent");
   content.innerHTML = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" style="vertical-align:-2px;margin-right:6px">
-      <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3c4.97 0 9 4.03 9 9">
-        <animateTransform attributeName="transform" dur="1.5s" repeatCount="indefinite" type="rotate" values="0 12 12;360 12 12"/>
-      </path>
-    </svg>
-    Chargement...
+    <span style="display:inline-flex; align-items:center; font-size:1em;">
+      <svg xmlns="http://www.w3.org/2000/svg" 
+          width="1em" 
+          height="1em" 
+          viewBox="0 0 24 24" 
+          style="margin-right:6px; flex-shrink:0;">
+        <path fill="none" 
+              stroke="currentColor" 
+              stroke-linecap="round" 
+              stroke-linejoin="round" 
+              stroke-width="2" 
+              d="M12 3c4.97 0 9 4.03 9 9">
+          <animateTransform 
+            attributeName="transform" 
+            dur="1.5s" 
+            repeatCount="indefinite" 
+            type="rotate" 
+            values="0 12 12;360 12 12"/>
+        </path>
+      </svg>
+      <span>Chargement...</span>
+    </span>
   `;
   try {
     const url = licenseLang === "fr" ? "/license/fr" : "/license";
