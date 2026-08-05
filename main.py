@@ -13,6 +13,8 @@ import threading
 import collections
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
+from urllib.request import Request, urlopen
+from urllib.error import URLError, HTTPError
 PASSWORD = "change-moi-STP"
 HOST = "0.0.0.0"
 PORT = 8877
@@ -23,6 +25,8 @@ FILES_ROOT = os.path.expanduser("~/.minetest")
 CONFIG_FILE = os.path.expanduser("~/.minetest/minetest.conf")
 DEBUG_FILE = os.path.expanduser("~/.minetest/debug.txt")
 EXTRA_ARGS = ["--server", "--world", WORLD_DIR]
+SCRIPT_PATH = os.path.abspath(__file__)
+UPDATE_URL = "https://raw.githubusercontent.com/survivalier/Luanti-Panel/refs/heads/main/main.py"
 CONSOLE_BUFFER_SIZE = 2000
 PASSWORD_HASH = hashlib.sha256(PASSWORD.encode()).hexdigest()
 SESSIONS = {}
@@ -111,6 +115,49 @@ def send_command(cmd_text):
             return True, "Commande envoyée."
         except Exception as e:
             return False, str(e)
+def download_panel_update():
+    """Télécharge la dernière version du script du panel depuis GitHub."""
+    req = Request(UPDATE_URL, headers={"User-Agent": "LuantiPanel-Updater"})
+    try:
+        with urlopen(req, timeout=30) as resp:
+            data = resp.read()
+    except HTTPError as e:
+        raise RuntimeError(f"Échec du téléchargement (HTTP {e.code}).")
+    except URLError as e:
+        raise RuntimeError(f"Échec du téléchargement : {e.reason}")
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise RuntimeError("Le fichier téléchargé n'est pas un script texte valide.")
+    if "class Handler" not in text or "PASSWORD" not in text:
+        raise RuntimeError("Le fichier téléchargé ne ressemble pas à un script de panel valide.")
+    return text
+def apply_new_password(source_text, new_password):
+    """Remplace la ligne PASSWORD = "..." du script téléchargé par le nouveau mot de passe choisi."""
+    escaped = new_password.replace("\\", "\\\\").replace('"', '\\"')
+    pattern = re.compile(r'^PASSWORD\s*=\s*".*"\s*$', re.MULTILINE)
+    if not pattern.search(source_text):
+        raise ValueError("Impossible de localiser la ligne PASSWORD dans le nouveau fichier.")
+    return pattern.sub(f'PASSWORD = "{escaped}"', source_text, count=1)
+def write_panel_source(new_source):
+    """Sauvegarde l'ancien script puis écrit la nouvelle version sur disque."""
+    backup_path = SCRIPT_PATH + ".bak"
+    try:
+        shutil.copy2(SCRIPT_PATH, backup_path)
+    except OSError:
+        pass
+    tmp_path = SCRIPT_PATH + ".new"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        f.write(new_source)
+    os.replace(tmp_path, SCRIPT_PATH)
+def schedule_panel_restart(delay=0.6):
+    """Relance le processus du panel (re-exec) après un court délai, pour laisser
+    le temps à la réponse HTTP de mise à jour d'être envoyée au navigateur."""
+    def _do_restart():
+        time.sleep(delay)
+        console_push("[panel] Redémarrage du panel après mise à jour…")
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+    threading.Thread(target=_do_restart, daemon=True).start()
 def safe_mod_path(relfolder):
     """Empêche toute évasion du dossier MODS_DIR (path traversal).
     Accepte soit un mod autonome ("mymod"), soit un sous-mod d'un modpack
@@ -643,7 +690,7 @@ input:checked + .slider:before{transform:translateX(18px)}
     scrollbar-color: #777 transparent;
 }
 #console::-webkit-scrollbar {
-    width: 3px;
+    width: 5px;
 }
 #console::-webkit-scrollbar-track {
     background: transparent;
@@ -663,6 +710,19 @@ input:checked + .slider:before{transform:translateX(18px)}
 #console::-webkit-scrollbar-corner {
     background: transparent;
 }
+.modal-overlay{position:fixed;inset:0;background:rgba(5,6,10,.68);backdrop-filter:blur(2px);display:none;align-items:center;justify-content:center;z-index:300;padding:16px}
+.modal-box{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:24px;width:100%;max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,.55)}
+.modal-box h3{margin:0 0 6px;font-size:16px;display:flex;align-items:center;gap:9px;color:#f5f5f5}
+.modal-box h3 svg{color:var(--accent)}
+.modal-box p{color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 16px}
+.modal-box label{display:block;font-size:12.5px;font-weight:600;margin-bottom:6px;color:#ddd}
+.modal-box input[type=password]{width:100%;margin-bottom:6px}
+.modal-error{color:var(--bad);font-size:12.5px;margin:6px 0 4px;display:none}
+.modal-actions{display:flex;gap:8px;margin-top:16px;justify-content:flex-end}
+.modal-step{color:var(--good);font-size:12.5px;margin-top:12px}
+.upd-spin{position:relative;display:inline-flex;width:15px;height:15px;flex-shrink:0}
+.upd-spin svg{position:absolute;inset:0;width:100%;height:100%}
+.upd-spin .upd-icon{padding:3.5px;color:#fff}
 </style></head>
 <body>
 <header>
@@ -672,6 +732,9 @@ input:checked + .slider:before{transform:translateX(18px)}
   </div>
   <div class="right-group">
     <div class="status-pill"><span class="status-dot" id="dot"></span><span id="statusText">...</span></div>
+    <button class="icon-btn" onclick="openUpdateModal()" title="Mettre à jour le panel">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+    </button>
     <button class="icon-btn" onclick="logout()" title="Déconnexion">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
     </button>
@@ -845,6 +908,32 @@ input:checked + .slider:before{transform:translateX(18px)}
 <div class="action-toast" id="actionToast">
   <svg class="action-spinner" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="12" cy="3.5" r="1.5"><animate attributeName="fill-opacity" dur="2.4s" keyTimes="0;0.125;0.25;1" repeatCount="indefinite" values="1;1;0;0"/></circle><circle cx="16.25" cy="4.64" r="1.5" opacity="0"><set fill="freeze" attributeName="opacity" begin="0.2s" to="1"/><animate attributeName="fill-opacity" begin="0.2s" dur="2.4s" keyTimes="0;0.125;0.25;1" repeatCount="indefinite" values="1;1;0;0"/></circle><circle cx="19.36" cy="7.75" r="1.5" opacity="0"><set fill="freeze" attributeName="opacity" begin="0.4s" to="1"/><animate attributeName="fill-opacity" begin="0.4s" dur="2.4s" keyTimes="0;0.125;0.25;1" repeatCount="indefinite" values="1;1;0;0"/></circle><circle cx="20.5" cy="12" r="1.5" opacity="0"><set fill="freeze" attributeName="opacity" begin="0.6s" to="1"/><animate attributeName="fill-opacity" begin="0.6s" dur="2.4s" keyTimes="0;0.125;0.25;1" repeatCount="indefinite" values="1;1;0;0"/></circle><circle cx="19.36" cy="16.25" r="1.5" opacity="0"><set fill="freeze" attributeName="opacity" begin="0.8s" to="1"/><animate attributeName="fill-opacity" begin="0.8s" dur="2.4s" keyTimes="0;0.125;0.25;1" repeatCount="indefinite" values="1;1;0;0"/></circle><circle cx="16.25" cy="19.36" r="1.5" opacity="0"><set fill="freeze" attributeName="opacity" begin="1s" to="1"/><animate attributeName="fill-opacity" begin="1s" dur="2.4s" keyTimes="0;0.125;0.25;1" repeatCount="indefinite" values="1;1;0;0"/></circle><circle cx="12" cy="20.5" r="1.5" opacity="0"><set fill="freeze" attributeName="opacity" begin="1.2s" to="1"/><animate attributeName="fill-opacity" begin="1.2s" dur="2.4s" keyTimes="0;0.125;0.25;1" repeatCount="indefinite" values="1;1;0;0"/></circle><circle cx="7.75" cy="19.36" r="1.5" opacity="0"><set fill="freeze" attributeName="opacity" begin="1.4s" to="1"/><animate attributeName="fill-opacity" begin="1.4s" dur="2.4s" keyTimes="0;0.125;0.25;1" repeatCount="indefinite" values="1;1;0;0"/></circle><circle cx="4.64" cy="16.25" r="1.5" opacity="0"><set fill="freeze" attributeName="opacity" begin="1.6s" to="1"/><animate attributeName="fill-opacity" begin="1.6s" dur="2.4s" keyTimes="0;0.125;0.25;1" repeatCount="indefinite" values="1;1;0;0"/></circle><circle cx="3.5" cy="12" r="1.5" opacity="0"><set fill="freeze" attributeName="opacity" begin="1.8s" to="1"/><animate attributeName="fill-opacity" begin="1.8s" dur="2.4s" keyTimes="0;0.125;0.25;1" repeatCount="indefinite" values="1;1;0;0"/></circle><circle cx="4.64" cy="7.75" r="1.5" opacity="0"><set fill="freeze" attributeName="opacity" begin="2s" to="1"/><animate attributeName="fill-opacity" begin="2s" dur="2.4s" keyTimes="0;0.125;0.25;1" repeatCount="indefinite" values="1;1;0;0"/></circle><circle cx="7.75" cy="4.64" r="1.5" opacity="0"><set fill="freeze" attributeName="opacity" begin="2.2s" to="1"/><animate attributeName="fill-opacity" begin="2.2s" dur="2.4s" keyTimes="0;0.125;0.25;1" repeatCount="indefinite" values="1;1;0;0"/></circle></g></svg>
   <span id="actionLabel"></span>
+</div>
+<div class="modal-overlay" id="updateModal">
+  <div class="modal-box">
+    <h3><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Mettre à jour le panel</h3>
+    <p>Ceci va arrêter le serveur Luanti, télécharger la dernière version du panel depuis GitHub, puis redémarrer. La mise à jour remplace le fichier du panel, définis donc un nouveau mot de passe de connexion.</p>
+    <label for="updatePassword">Nouveau mot de passe du panel</label>
+    <input type="password" id="updatePassword" placeholder="Nouveau mot de passe">
+    <div class="modal-error" id="updateError"></div>
+    <div class="modal-step" id="updateStep" style="display:none"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="updateCancelBtn" onclick="closeUpdateModal()">Annuler</button>
+      <button class="btn" id="updateConfirmBtn" onclick="confirmUpdate()">
+        <span id="updateBtnLabel" style="display:inline-flex;align-items:center;gap:7px">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          Télécharger et mettre à jour
+        </span>
+        <span id="updateBtnSpinner" style="display:none;align-items:center;gap:7px">
+          <span class="upd-spin">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3c4.97 0 9 4.03 9 9"><animateTransform attributeName="transform" dur="1.5s" repeatCount="indefinite" type="rotate" values="0 12 12;360 12 12"/></path></svg>
+            <svg class="upd-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a1 1 0 0 1 1 1v10.586l2.293-2.293a1 1 0 0 1 1.414 1.414l-4 4a1 1 0 0 1-1.414 0l-4-4a1 1 0 1 1 1.414-1.414L11 13.586V3a1 1 0 0 1 1-1M5 17a1 1 0 0 1 1 1v2h12v-2a1 1 0 1 1 2 0v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a1 1 0 0 1 1-1"/></svg>
+          </span>
+          Mise à jour en cours…
+        </span>
+      </button>
+    </div>
+  </div>
 </div>
 <script>
 const ICONS = {
@@ -1228,6 +1317,66 @@ async function loadNetwork(){
     });
   }catch(e){}
 }
+let updateInProgress = false;
+function openUpdateModal(){
+  document.getElementById('updateModal').style.display = 'flex';
+  document.getElementById('updatePassword').value = '';
+  const errEl = document.getElementById('updateError');
+  errEl.style.display = 'none';
+  errEl.textContent = '';
+  const stepEl = document.getElementById('updateStep');
+  stepEl.style.display = 'none';
+  stepEl.textContent = '';
+  setUpdateLoading(false);
+}
+function closeUpdateModal(){
+  if(updateInProgress) return;
+  document.getElementById('updateModal').style.display = 'none';
+}
+document.getElementById('updateModal').addEventListener('click', e=>{
+  if(e.target.id === 'updateModal') closeUpdateModal();
+});
+function setUpdateLoading(loading){
+  updateInProgress = loading;
+  document.getElementById('updateBtnLabel').style.display = loading ? 'none' : 'inline-flex';
+  document.getElementById('updateBtnSpinner').style.display = loading ? 'inline-flex' : 'none';
+  document.getElementById('updatePassword').disabled = loading;
+  document.getElementById('updateConfirmBtn').disabled = loading;
+  document.getElementById('updateCancelBtn').disabled = loading;
+}
+async function confirmUpdate(){
+  const pw = document.getElementById('updatePassword').value;
+  const errEl = document.getElementById('updateError');
+  errEl.style.display = 'none';
+  errEl.textContent = '';
+  if(!pw || pw.length < 4){
+    errEl.textContent = 'Le mot de passe doit contenir au moins 4 caractères.';
+    errEl.style.display = 'block';
+    return;
+  }
+  setUpdateLoading(true);
+  const stepEl = document.getElementById('updateStep');
+  stepEl.style.display = 'block';
+  stepEl.textContent = 'Arrêt du serveur, téléchargement et installation de la mise à jour…';
+  try{
+    const r = await api('/api/panel/update', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({password: pw})});
+    let d = {};
+    try{ d = await r.json(); }catch(e){}
+    if(!r.ok){
+      errEl.textContent = 'Erreur : ' + (d.error || 'inconnue');
+      errEl.style.display = 'block';
+      setUpdateLoading(false);
+      stepEl.style.display = 'none';
+      return;
+    }
+    stepEl.textContent = 'Mise à jour installée. Redémarrage du panel — tu vas être redirigé vers la connexion…';
+    setTimeout(()=>{ location.href = '/login'; }, 4000);
+  }catch(e){
+    errEl.textContent = 'Erreur réseau pendant la mise à jour (le panel redémarre peut-être déjà).';
+    errEl.style.display = 'block';
+    setTimeout(()=>{ location.href = '/login'; }, 4000);
+  }
+}
 refreshStatus();
 </script>
 </body></html>"""
@@ -1510,6 +1659,25 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"ok": True})
             except Exception as e:
                 self._send_json({"error": str(e)}, 400)
+        elif path == "/api/panel/update":
+            data = self._get_json()
+            new_password = data.get("password", "")
+            if not isinstance(new_password, str) or len(new_password) < 4:
+                self._send_json({"error": "Mot de passe invalide (4 caractères minimum)."}, 400)
+                return
+            try:
+                stop_server()
+            except Exception:
+                pass
+            try:
+                source = download_panel_update()
+                new_source = apply_new_password(source, new_password)
+                write_panel_source(new_source)
+            except Exception as e:
+                self._send_json({"error": str(e)}, 400)
+                return
+            self._send_json({"ok": True})
+            schedule_panel_restart()
         else:
             self._send_json({"error": "not found"}, 404)
 def main():
