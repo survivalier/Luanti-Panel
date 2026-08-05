@@ -16,7 +16,6 @@ from urllib.parse import urlparse, parse_qs
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 PASSWORD = "change-moi-STP"
-PANEL_VERSION = "2"
 HOST = "0.0.0.0"
 PORT = 8877
 LUANTI_BIN = "luanti"
@@ -133,24 +132,6 @@ def download_panel_update():
     if "class Handler" not in text or "PASSWORD" not in text:
         raise RuntimeError("Le fichier téléchargé ne ressemble pas à un script de panel valide.")
     return text
-def extract_panel_version(source_text):
-    """Lit la valeur de PANEL_VERSION dans un script de panel (local ou distant)."""
-    m = re.search(r'^PANEL_VERSION\s*=\s*"([^"]*)"', source_text, re.MULTILINE)
-    return m.group(1) if m else None
-def _parse_version_tuple(v):
-    try:
-        return tuple(int(p) for p in v.strip().split("."))
-    except (ValueError, AttributeError, TypeError):
-        return None
-def is_remote_version_newer(local_version, remote_version):
-    """Retourne True si remote_version est plus récente que local_version, False si
-    identique/plus ancienne, ou None si l'une des deux versions est incomparable
-    (dans ce cas, on ne peut pas savoir — comparaison manuelle recommandée)."""
-    lt = _parse_version_tuple(local_version)
-    rt = _parse_version_tuple(remote_version)
-    if lt is None or rt is None:
-        return None
-    return rt > lt
 def apply_new_password(source_text, new_password):
     """Remplace la ligne PASSWORD = "..." du script téléchargé par le nouveau mot de passe choisi."""
     escaped = new_password.replace("\\", "\\\\").replace('"', '\\"')
@@ -749,10 +730,6 @@ input:checked + .slider:before{transform:translateX(18px)}
 .upd-spin-lg .upd-icon-lg{padding:16px;color:#fff}
 .update-progress h4{margin:0 0 8px;font-size:15px;color:#f5f5f5;font-weight:700}
 .update-progress p{margin:0;color:var(--muted);font-size:13px;line-height:1.5}
-.modal-version-info{font-size:12.5px;padding:9px 11px;border-radius:8px;margin:-4px 0 16px;background:var(--panel2);color:var(--muted)}
-.modal-version-info.uptodate{color:var(--good);background:rgba(62,207,142,.12)}
-.modal-version-info.new{color:var(--accent);background:rgba(91,140,255,.14)}
-.modal-version-info.warn{color:#f0c975;background:rgba(240,201,117,.12)}
 </style></head>
 <body>
 <header>
@@ -1515,16 +1492,6 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/network":
             if not self._require_auth(): return
             self._send_json(get_network_connections())
-        elif path == "/api/panel/check_update":
-            if not self._require_auth(): return
-            try:
-                remote_source = download_panel_update()
-                remote_version = extract_panel_version(remote_source)
-            except Exception as e:
-                self._send_json({"current": PANEL_VERSION, "remote": None, "newer_available": None, "error": str(e)})
-                return
-            newer = is_remote_version_newer(PANEL_VERSION, remote_version) if remote_version else None
-            self._send_json({"current": PANEL_VERSION, "remote": remote_version, "newer_available": newer, "error": None})
         elif path == "/license":
             license_text = """MIT License
 
