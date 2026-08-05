@@ -583,10 +583,18 @@ button.submit:hover{background:var(--accent)}
 </div>
 <script>
 document.getElementById('pw').addEventListener('keydown', e => { if(e.key==='Enter') login(); });
-async function login(){
+async function login() {
   const pw = document.getElementById('pw').value;
-  const r = await fetch('/api/login', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({password: pw})});
-  if(r.ok){ location.href = '/'; } else { document.getElementById('err').textContent = '⚠ Mot de passe incorrect.'; }
+  const r = await fetch('/api/login', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({password: pw})
+  });
+  if (r.ok) {
+    location.href = '/';
+  } else {
+    document.getElementById('err').textContent = '⚠ Mot de passe incorrect.';
+  }
 }
 </script>
 </body></html>"""
@@ -922,6 +930,10 @@ input:checked + .slider:before{transform:translateX(18px)}
       <h3><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Mettre à jour le panel</h3>
       <p>Ceci va arrêter le serveur Luanti, télécharger la dernière version du panel depuis GitHub, puis redémarrer. La mise à jour remplace le fichier du panel, définis donc un nouveau mot de passe de connexion.</p>
       <label for="updatePassword">Nouveau mot de passe du panel</label>
+      <label>
+          <input type="checkbox" id="keepPassword" onchange="togglePassword()">
+          Conserver le mot de passe actuel
+      </label>
       <input type="password" id="updatePassword" placeholder="Nouveau mot de passe">
       <div class="modal-error" id="updateError"></div>
       <div class="modal-actions">
@@ -1384,6 +1396,22 @@ async function confirmUpdate(){
     setTimeout(()=>{ location.href = '/login'; }, 4000);
   }
 }
+function togglePassword() {
+    const keep = document.getElementById("keepPassword").checked;
+    const field = document.getElementById("newPassword");
+    if (keep) {
+        field.disabled = true;
+        field.value = "";
+        field.placeholder = "Le mot de passe actuel sera conservé";
+    } else {
+        field.disabled = false;
+        field.placeholder = "Nouveau mot de passe";
+    }
+}
+body: JSON.stringify({
+    password: document.getElementById("newPassword").value,
+    keep_password: document.getElementById("keepPassword").checked
+})
 refreshStatus();
 </script>
 </body></html>"""
@@ -1668,10 +1696,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"error": str(e)}, 400)
         elif path == "/api/panel/update":
             data = self._get_json()
-            new_password = data.get("password", "")
-            if not isinstance(new_password, str) or len(new_password) < 4:
-                self._send_json({"error": "Mot de passe invalide (4 caractères minimum)."}, 400)
-                return
+            keep_password = data.get("keep_password", False)
+            if keep_password:
+                new_password = PASSWORD
+            else:
+                new_password = data.get("password", "")
+                if not isinstance(new_password, str) or len(new_password) < 4:
+                    self._send_json({"error": "Mot de passe invalide (4 caractères minimum)."}, 400)
+                    return
             try:
                 stop_server()
             except Exception:
