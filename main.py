@@ -723,6 +723,13 @@ input:checked + .slider:before{transform:translateX(18px)}
 .upd-spin{position:relative;display:inline-flex;width:15px;height:15px;flex-shrink:0}
 .upd-spin svg{position:absolute;inset:0;width:100%;height:100%}
 .upd-spin .upd-icon{padding:3.5px;color:#fff}
+.modal-overlay.locked{cursor:default}
+.update-progress{text-align:center;padding:8px 4px 4px}
+.upd-spin-lg{position:relative;display:inline-flex;width:64px;height:64px;color:var(--accent);margin-bottom:18px}
+.upd-spin-lg svg{position:absolute;inset:0;width:100%;height:100%}
+.upd-spin-lg .upd-icon-lg{padding:16px;color:#fff}
+.update-progress h4{margin:0 0 8px;font-size:15px;color:#f5f5f5;font-weight:700}
+.update-progress p{margin:0;color:var(--muted);font-size:13px;line-height:1.5}
 </style></head>
 <body>
 <header>
@@ -911,27 +918,27 @@ input:checked + .slider:before{transform:translateX(18px)}
 </div>
 <div class="modal-overlay" id="updateModal">
   <div class="modal-box">
-    <h3><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Mettre à jour le panel</h3>
-    <p>Ceci va arrêter le serveur Luanti, télécharger la dernière version du panel depuis GitHub, puis redémarrer. La mise à jour remplace le fichier du panel, définis donc un nouveau mot de passe de connexion.</p>
-    <label for="updatePassword">Nouveau mot de passe du panel</label>
-    <input type="password" id="updatePassword" placeholder="Nouveau mot de passe">
-    <div class="modal-error" id="updateError"></div>
-    <div class="modal-step" id="updateStep" style="display:none"></div>
-    <div class="modal-actions">
-      <button class="btn ghost" id="updateCancelBtn" onclick="closeUpdateModal()">Annuler</button>
-      <button class="btn" id="updateConfirmBtn" onclick="confirmUpdate()">
-        <span id="updateBtnLabel" style="display:inline-flex;align-items:center;gap:7px">
+    <div id="updateFormView">
+      <h3><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Mettre à jour le panel</h3>
+      <p>Ceci va arrêter le serveur Luanti, télécharger la dernière version du panel depuis GitHub, puis redémarrer. La mise à jour remplace le fichier du panel, définis donc un nouveau mot de passe de connexion.</p>
+      <label for="updatePassword">Nouveau mot de passe du panel</label>
+      <input type="password" id="updatePassword" placeholder="Nouveau mot de passe">
+      <div class="modal-error" id="updateError"></div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="updateCancelBtn" onclick="closeUpdateModal()">Annuler</button>
+        <button class="btn" id="updateConfirmBtn" onclick="confirmUpdate()">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
           Télécharger et mettre à jour
-        </span>
-        <span id="updateBtnSpinner" style="display:none;align-items:center;gap:7px">
-          <span class="upd-spin">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3c4.97 0 9 4.03 9 9"><animateTransform attributeName="transform" dur="1.5s" repeatCount="indefinite" type="rotate" values="0 12 12;360 12 12"/></path></svg>
-            <svg class="upd-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a1 1 0 0 1 1 1v10.586l2.293-2.293a1 1 0 0 1 1.414 1.414l-4 4a1 1 0 0 1-1.414 0l-4-4a1 1 0 1 1 1.414-1.414L11 13.586V3a1 1 0 0 1 1-1M5 17a1 1 0 0 1 1 1v2h12v-2a1 1 0 1 1 2 0v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a1 1 0 0 1 1-1"/></svg>
-          </span>
-          Mise à jour en cours…
-        </span>
-      </button>
+        </button>
+      </div>
+    </div>
+    <div id="updateProgressView" class="update-progress" style="display:none">
+      <span class="upd-spin-lg">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3c4.97 0 9 4.03 9 9"><animateTransform attributeName="transform" dur="1.5s" repeatCount="indefinite" type="rotate" values="0 12 12;360 12 12"/></path></svg>
+        <svg class="upd-icon-lg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a1 1 0 0 1 1 1v10.586l2.293-2.293a1 1 0 0 1 1.414 1.414l-4 4a1 1 0 0 1-1.414 0l-4-4a1 1 0 1 1 1.414-1.414L11 13.586V3a1 1 0 0 1 1-1M5 17a1 1 0 0 1 1 1v2h12v-2a1 1 0 1 1 2 0v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a1 1 0 0 1 1-1"/></svg>
+      </span>
+      <h4>Mise à jour en cours…</h4>
+      <p id="updateStep">Arrêt du serveur, téléchargement et installation de la mise à jour…</p>
     </div>
   </div>
 </div>
@@ -1324,10 +1331,7 @@ function openUpdateModal(){
   const errEl = document.getElementById('updateError');
   errEl.style.display = 'none';
   errEl.textContent = '';
-  const stepEl = document.getElementById('updateStep');
-  stepEl.style.display = 'none';
-  stepEl.textContent = '';
-  setUpdateLoading(false);
+  showUpdateFormView();
 }
 function closeUpdateModal(){
   if(updateInProgress) return;
@@ -1336,13 +1340,21 @@ function closeUpdateModal(){
 document.getElementById('updateModal').addEventListener('click', e=>{
   if(e.target.id === 'updateModal') closeUpdateModal();
 });
-function setUpdateLoading(loading){
-  updateInProgress = loading;
-  document.getElementById('updateBtnLabel').style.display = loading ? 'none' : 'inline-flex';
-  document.getElementById('updateBtnSpinner').style.display = loading ? 'inline-flex' : 'none';
-  document.getElementById('updatePassword').disabled = loading;
-  document.getElementById('updateConfirmBtn').disabled = loading;
-  document.getElementById('updateCancelBtn').disabled = loading;
+function showUpdateFormView(){
+  updateInProgress = false;
+  document.getElementById('updateModal').classList.remove('locked');
+  document.getElementById('updateFormView').style.display = 'block';
+  document.getElementById('updateProgressView').style.display = 'none';
+  document.getElementById('updatePassword').disabled = false;
+  document.getElementById('updateConfirmBtn').disabled = false;
+  document.getElementById('updateCancelBtn').disabled = false;
+}
+function showUpdateProgressView(message){
+  updateInProgress = true;
+  document.getElementById('updateModal').classList.add('locked');
+  document.getElementById('updateFormView').style.display = 'none';
+  document.getElementById('updateProgressView').style.display = 'block';
+  document.getElementById('updateStep').textContent = message;
 }
 async function confirmUpdate(){
   const pw = document.getElementById('updatePassword').value;
@@ -1354,26 +1366,21 @@ async function confirmUpdate(){
     errEl.style.display = 'block';
     return;
   }
-  setUpdateLoading(true);
-  const stepEl = document.getElementById('updateStep');
-  stepEl.style.display = 'block';
-  stepEl.textContent = 'Arrêt du serveur, téléchargement et installation de la mise à jour…';
+  showUpdateProgressView('Arrêt du serveur, téléchargement et installation de la mise à jour…');
   try{
     const r = await api('/api/panel/update', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({password: pw})});
     let d = {};
     try{ d = await r.json(); }catch(e){}
     if(!r.ok){
+      showUpdateFormView();
       errEl.textContent = 'Erreur : ' + (d.error || 'inconnue');
       errEl.style.display = 'block';
-      setUpdateLoading(false);
-      stepEl.style.display = 'none';
       return;
     }
-    stepEl.textContent = 'Mise à jour installée. Redémarrage du panel — tu vas être redirigé vers la connexion…';
+    showUpdateProgressView('Mise à jour installée. Redémarrage du panel — tu vas être redirigé vers la connexion…');
     setTimeout(()=>{ location.href = '/login'; }, 4000);
   }catch(e){
-    errEl.textContent = 'Erreur réseau pendant la mise à jour (le panel redémarre peut-être déjà).';
-    errEl.style.display = 'block';
+    showUpdateProgressView('Redémarrage du panel en cours — tu vas être redirigé vers la connexion…');
     setTimeout(()=>{ location.href = '/login'; }, 4000);
   }
 }
