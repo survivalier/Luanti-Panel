@@ -16,7 +16,7 @@ from urllib.parse import urlparse, parse_qs
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 PASSWORD = "change-moi-STP"
-PANEL_VERSION = "3"
+PANEL_VERSION = "4"
 HOST = "0.0.0.0"
 PORT = 8877
 LUANTI_BIN = "luanti"
