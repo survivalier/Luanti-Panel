@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
-PASSWORD = "change-moi-STP"
+PASSWORD = "Survivalier14."
 HOST = "0.0.0.0"
 PORT = 8877
 LUANTI_BIN = "luanti"
@@ -739,14 +739,14 @@ input:checked + .slider:before{transform:translateX(18px)}
   </div>
   <div class="right-group">
     <div class="status-pill"><span class="status-dot" id="dot"></span><span id="statusText">...</span></div>
+    <button class="icon-btn" onclick="license()" title="License">
+      <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 21H6a3 3 0 0 1-3-3v-1h10v2a2 2 0 0 0 4 0V5a2 2 0 1 1 2 2h-2m2-4H8a3 3 0 0 0-3 3v11M9 7h4m-4 4h4"/></svg>
+    </button>
     <button class="icon-btn" onclick="openUpdateModal()" title="Mettre à jour le panel">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
     </button>
     <button class="icon-btn" onclick="logout()" title="Déconnexion">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-    </button>
-    <button class="icon-btn" onclick="license()" title="License">
-      <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><title xmlns="">license</title><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 21H6a3 3 0 0 1-3-3v-1h10v2a2 2 0 0 0 4 0V5a2 2 0 1 1 2 2h-2m2-4H8a3 3 0 0 0-3 3v11M9 7h4m-4 4h4"/></svg>
     </button>
   </div>
 </header>
@@ -942,6 +942,18 @@ input:checked + .slider:before{transform:translateX(18px)}
       </span>
       <h4>Mise à jour en cours…</h4>
       <p id="updateStep">Arrêt du serveur, téléchargement et installation de la mise à jour…</p>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="licenseModal" style="display:none">
+  <div class="modal-box" style="max-width:800px;max-height:85vh;display:flex;flex-direction:column">
+    <h3><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><title xmlns="">license</title><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 21H6a3 3 0 0 1-3-3v-1h10v2a2 2 0 0 0 4 0V5a2 2 0 1 1 2 2h-2m2-4H8a3 3 0 0 0-3 3v11M9 7h4m-4 4h4"/></svg>Licence</h3>
+    <div id="licenseContent" style="overflow:auto;flex:1;background:#0d0f14;border:1px solid var(--border);border-radius:8px;padding:12px;white-space:pre-wrap"></div>
+    <div class="modal-actions">
+      <button class="icon-btn" onclick="toggleLicenseLanguage()" title="Changer de langue">
+        <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 16 16"><title xmlns="">translate</title><g fill="currentColor"><path d="M4.545 6.714L4.11 8H3l1.862-5h1.284L8 8H6.833l-.435-1.286zm1.634-.736L5.5 3.956h-.049l-.679 2.022z"/><path d="M0 2a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v3h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-3H2a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1zm7.138 9.995q.289.451.63.846c-.748.575-1.673 1.001-2.768 1.292c.178.217.451.635.555.867c1.125-.359 2.08-.844 2.886-1.494c.777.665 1.739 1.165 2.93 1.472c.133-.254.414-.673.629-.89c-1.125-.253-2.057-.694-2.82-1.284c.681-.747 1.222-1.651 1.621-2.757H14V8h-3v1.047h.765c-.318.844-.74 1.546-1.272 2.13a6 6 0 0 1-.415-.492a2 2 0 0 1-.94.31"/></g></svg>
+      </button>
+      <button class="btn ghost" onclick="closeLicense()">Fermer</button>
     </div>
   </div>
 </div>
@@ -1387,6 +1399,39 @@ async function confirmUpdate(){
     setTimeout(()=>{ location.href = '/login'; }, 4000);
   }
 }
+let licenseLang = "en";
+async function loadLicense() {
+  const content = document.getElementById("licenseContent");
+  content.innerHTML = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" style="vertical-align:-2px;margin-right:6px">
+      <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3c4.97 0 9 4.03 9 9">
+        <animateTransform attributeName="transform" dur="1.5s" repeatCount="indefinite" type="rotate" values="0 12 12;360 12 12"/>
+      </path>
+    </svg>
+    Chargement...
+  `;
+  try {
+    const url = licenseLang === "fr" ? "/license/fr" : "/license";
+    const r = await fetch(url);
+    content.textContent = await r.text();
+  } catch {
+    content.textContent = "Impossible de charger la licence.";
+  }
+}
+async function license() {
+  document.getElementById("licenseModal").style.display = "flex";
+  await loadLicense();
+}
+async function toggleLicenseLanguage() {
+  licenseLang = licenseLang === "fr" ? "en" : "fr";
+  await loadLicense();
+}
+function closeLicense(){
+  document.getElementById("licenseModal").style.display = "none";
+}
+document.getElementById("licenseModal").addEventListener("click", e=>{
+  if(e.target.id==="licenseModal") closeLicense();
+});
 refreshStatus();
 </script>
 </body></html>"""
@@ -1507,7 +1552,8 @@ class Handler(BaseHTTPRequestHandler):
         copies of the Software, and to permit persons to whom the Software is
         furnished to do so, subject to the following conditions:
 
-        The above copyright notice and this permission notice shall be included in all
+        The above copyright notice and .this permission notice shall be included in all
+
         copies or substantial portions of the Software.
 
         THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
@@ -1517,6 +1563,33 @@ class Handler(BaseHTTPRequestHandler):
         LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
         OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
         SOFTWARE."""
+            body = license_text.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        elif path == "/license/fr":
+            license_text = """License MIT
+            
+            Copyright (c) 2026 Survivalier
+            
+            L'autorisation est accordée, gracieusement à toute personne obtenant une copie de ce logiciel
+            et des fichiers de documentation associés (le "Logiciel"), de commercialiser le Logiciel sans
+            restriction, y compris sans limitation les droits d'utiliser, de copier, de modifier, de fusionner, de
+            publier, de distribuer, de sous-licensier et/ou de vendre des copies du Logiciel, ainsi que
+            d'autoriser les personnes auxquelles le Logiciel est fourni à le faire, sous réserve des conditions suivantes:
+            
+            La mention de copyright ci-dessus et la présente permission doivent être incluses dans toutes
+            copies ou parties substantielles du Logiciel.
+            
+            LE LOGICIEL EST FOURNI "TEL QUEL", SANS GARANTIE D'AUCUNE SORTE, EXPRESSE OU
+            IMPLICITE, Y COMPRIS MAIS NON LIMITÉ AUX GARANTIES DE QUALITÉ MARCHANDE,
+            D'ADÉQUATION À UN USAGE PARTICULIER ET D'NON-CONTREFAÇON. EN AUCUN CAS, LES
+            AUTEURS OU TITULAIRES DU DROIT D'AUTEUR NE SERONT RESPONSABLES DE TOUTE
+            RÉCLAMATION, DOMMAGE OU AUTRE RESPONSABILITÉ, QUE CE SOIT DANS LE CADRE D'UN CONTRAT,
+            D'UN DÉLIT OU AUTRE, EN PROVENANCE, DÉCOULANT OU EN RELATION AVEC LE LOGICIEL OU SON UTILISATION, OU
+            D'AUTRES DEALINGS LIÉS AU LOGICIEL."""
             body = license_text.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
