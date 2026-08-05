@@ -643,7 +643,7 @@ input:checked + .slider:before{transform:translateX(18px)}
     scrollbar-color: #777 transparent;
 }
 #console::-webkit-scrollbar {
-    width: 5px;
+    width: 3px;
 }
 #console::-webkit-scrollbar-track {
     background: transparent;
