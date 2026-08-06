@@ -15,8 +15,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
-PASSWORD = "change-moi-STP"
-PANEL_VERSION = "3"
+import ssl
+from zeroconf import Zeroconf, ServiceInfo
+import socket
+PASSWORD = "Change-moi-STP"
+PANEL_VERSION = "4"
 HOST = "0.0.0.0"
 PORT = 8877
 LUANTI_BIN = "luanti"
@@ -185,6 +188,13 @@ def schedule_panel_restart(delay=0.6):
         console_push("[panel] Redémarrage du panel après mise à jour…")
         os.execv(sys.executable, [sys.executable] + sys.argv)
     threading.Thread(target=_do_restart, daemon=True).start()
+def schedule_panel_shutdown(delay=0.5):
+    """Arrête complètement le process du panel après un court délai."""
+    def _do_shutdown():
+        time.sleep(delay)
+        console_push("[panel] Extinction du panel demandée.")
+        os._exit(0)
+    threading.Thread(target=_do_shutdown, daemon=True).start()
 def safe_mod_path(relfolder):
     """Empêche toute évasion du dossier MODS_DIR (path traversal).
     Accepte soit un mod autonome ("mymod"), soit un sous-mod d'un modpack
@@ -792,11 +802,14 @@ input:checked + .slider:before{transform:translateX(18px)}
     <button class="icon-btn" onclick="logout()" title="Déconnexion">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
     </button>
+    <button class="icon-btn" onclick="power()" title="Système">
+      <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><title xmlns="">power-fill</title><g fill="none" fill-rule="evenodd"><path d="m12.593 23.258l-.011.002l-.071.035l-.02.004l-.014-.004l-.071-.035q-.016-.005-.024.005l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.017-.018m.265-.113l-.013.002l-.185.093l-.01.01l-.003.011l.018.43l.005.012l.008.007l.201.093q.019.005.029-.008l.004-.014l-.034-.614q-.005-.018-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.004-.011l.017-.43l-.003-.012l-.01-.01z"/><path fill="currentColor" d="M13.5 3a1.5 1.5 0 0 0-3 0v10a1.5 1.5 0 0 0 3 0zM7.854 5.75a1.5 1.5 0 1 0-1.661-2.5A10.49 10.49 0 0 0 1.5 12c0 5.799 4.701 10.5 10.5 10.5S22.5 17.799 22.5 12c0-3.654-1.867-6.87-4.693-8.75a1.5 1.5 0 0 0-1.66 2.5a7.5 7.5 0 1 1-8.292 0Z"/></g></svg>
+    </button>
   </div>
 </header>
 <nav>
   <button class="active" onclick="showTab('server')">
-    <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 16 16"><title xmlns="">server</title><path fill="currentColor" d="M14 11a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1zM3 12a1 1 0 1 0 0 2a1 1 0 0 0 0-2m3 0a1 1 0 1 0 0 2a1 1 0 0 0 0-2m8-6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zM3 7a1 1 0 1 0 0 2a1 1 0 0 0 0-2m3 0a1 1 0 1 0 0 2a1 1 0 0 0 0-2m8-6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1zM3 2a1 1 0 1 0 0 2a1 1 0 0 0 0-2m3 0a1 1 0 1 0 0 2a1 1 0 0 0 0-2"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 16 16"><path fill="currentColor" d="M14 11a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1zM3 12a1 1 0 1 0 0 2a1 1 0 0 0 0-2m3 0a1 1 0 1 0 0 2a1 1 0 0 0 0-2m8-6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zM3 7a1 1 0 1 0 0 2a1 1 0 0 0 0-2m3 0a1 1 0 1 0 0 2a1 1 0 0 0 0-2m8-6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1zM3 2a1 1 0 1 0 0 2a1 1 0 0 0 0-2m3 0a1 1 0 1 0 0 2a1 1 0 0 0 0-2"/></svg>
     Serveur
   </button>
   <button onclick="showTab('mods')">
@@ -816,7 +829,7 @@ input:checked + .slider:before{transform:translateX(18px)}
     Debug
   </button>
   <button onclick="showTab('network')">
-    <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><title xmlns="">network-outline</title><path fill="currentColor" d="M15 20a1 1 0 0 0-1-1h-1v-2h4a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4v2h-1a1 1 0 0 0-1 1H2v2h7a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1h7v-2zm-8-5V5h10v10z"/></svg>
+    <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M15 20a1 1 0 0 0-1-1h-1v-2h4a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4v2h-1a1 1 0 0 0-1 1H2v2h7a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1h7v-2zm-8-5V5h10v10z"/></svg>
     Réseau
   </button>
 </nav>
@@ -862,7 +875,7 @@ input:checked + .slider:before{transform:translateX(18px)}
     <div class="row">
       <input id="gitUrl" placeholder="URL du dépôt git (https://...)">
       <button class="btn" onclick="installGit()">
-        <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><title xmlns="">github</title><path fill="currentColor" d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5c.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34c-.46-1.16-1.11-1.47-1.11-1.47c-.91-.62.07-.6.07-.6c1 .07 1.53 1.03 1.53 1.03c.87 1.52 2.34 1.07 2.91.83c.09-.65.35-1.09.63-1.34c-2.22-.25-4.55-1.11-4.55-4.92c0-1.11.38-2 1.03-2.71c-.1-.25-.45-1.29.1-2.64c0 0 .84-.27 2.75 1.02c.79-.22 1.65-.33 2.5-.33s1.71.11 2.5.33c1.91-1.29 2.75-1.02 2.75-1.02c.55 1.35.2 2.39.1 2.64c.65.71 1.03 1.6 1.03 2.71c0 3.82-2.34 4.66-4.57 4.91c.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5c.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34c-.46-1.16-1.11-1.47-1.11-1.47c-.91-.62.07-.6.07-.6c1 .07 1.53 1.03 1.53 1.03c.87 1.52 2.34 1.07 2.91.83c.09-.65.35-1.09.63-1.34c-2.22-.25-4.55-1.11-4.55-4.92c0-1.11.38-2 1.03-2.71c-.1-.25-.45-1.29.1-2.64c0 0 .84-.27 2.75 1.02c.79-.22 1.65-.33 2.5-.33s1.71.11 2.5.33c1.91-1.29 2.75-1.02 2.75-1.02c.55 1.35.2 2.39.1 2.64c.65.71 1.03 1.6 1.03 2.71c0 3.82-2.34 4.66-4.57 4.91c.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2"/></svg>
         Cloner
       </button>
     </div>
@@ -873,7 +886,7 @@ input:checked + .slider:before{transform:translateX(18px)}
     <input type="file" id="zipInput" accept=".zip" style="display:none" onchange="uploadZip(this.files[0])">
   </div>
   <div class="card">
-    <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"></path><path d="M2 17l10 5 10-5"></path><path d="M2 12l10 5 10-5"></path></svg>Mods installés</h3>
+    <h3><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M21.93 7.67a1 1 0 0 0-.07-.17c-.02-.03-.04-.05-.06-.08c-.03-.04-.06-.09-.1-.13c-.03-.03-.06-.04-.08-.07c-.04-.03-.07-.06-.11-.09h-.01l-9.01-5a.99.99 0 0 0-.97 0l-9.01 5H2.5c-.04.02-.08.06-.11.09a.3.3 0 0 0-.08.07c-.04.04-.07.08-.1.13c-.02.03-.04.05-.06.08c-.03.05-.05.11-.07.17c0 .02-.02.05-.03.07c-.02.08-.04.17-.04.26v8c0 .36.2.7.51.87l9 5s.1.04.14.06c.03.01.06.03.09.03a1.1 1.1 0 0 0 .5 0c.03 0 .06-.02.09-.03c.05-.02.1-.03.14-.06l9-5c.32-.18.51-.51.51-.87V8c0-.09-.01-.18-.04-.26c0-.03-.02-.05-.03-.07ZM12 4.15l6.94 3.86l-2.44 1.36l-6.94-3.86zm-4.5 2.5l6.94 3.86L12 11.87L5.06 8.01zM20 15.42l-7 3.89V13.6l2.5-1.39v3.21l2-1.11V11.1L20 9.71z"/></svg>Mods installés</h3>
     <div id="modsList"></div>
   </div>
 </div>
@@ -997,22 +1010,41 @@ input:checked + .slider:before{transform:translateX(18px)}
 </div>
 <div class="modal-overlay" id="licenseModal" style="display:none">
   <div class="modal-box" style="max-width:800px;max-height:85vh;display:flex;flex-direction:column">
-    <h3><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><title xmlns="">license</title><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 21H6a3 3 0 0 1-3-3v-1h10v2a2 2 0 0 0 4 0V5a2 2 0 1 1 2 2h-2m2-4H8a3 3 0 0 0-3 3v11M9 7h4m-4 4h4"/></svg>Licence</h3>
+    <h3><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 21H6a3 3 0 0 1-3-3v-1h10v2a2 2 0 0 0 4 0V5a2 2 0 1 1 2 2h-2m2-4H8a3 3 0 0 0-3 3v11M9 7h4m-4 4h4"/></svg>Licence</h3>
     <div id="licenseContent" style="overflow:auto;flex:1;background:#0d0f14;border:1px solid var(--border);border-radius:8px;padding:12px;white-space:pre-wrap"></div>
     <div class="modal-actions">
       <button class="icon-btn" onclick="toggleLicenseLanguage()" title="Changer de langue">
-        <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 16 16"><title xmlns="">translate</title><g fill="currentColor"><path d="M4.545 6.714L4.11 8H3l1.862-5h1.284L8 8H6.833l-.435-1.286zm1.634-.736L5.5 3.956h-.049l-.679 2.022z"/><path d="M0 2a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v3h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-3H2a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1zm7.138 9.995q.289.451.63.846c-.748.575-1.673 1.001-2.768 1.292c.178.217.451.635.555.867c1.125-.359 2.08-.844 2.886-1.494c.777.665 1.739 1.165 2.93 1.472c.133-.254.414-.673.629-.89c-1.125-.253-2.057-.694-2.82-1.284c.681-.747 1.222-1.651 1.621-2.757H14V8h-3v1.047h.765c-.318.844-.74 1.546-1.272 2.13a6 6 0 0 1-.415-.492a2 2 0 0 1-.94.31"/></g></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 16 16"><g fill="currentColor"><path d="M4.545 6.714L4.11 8H3l1.862-5h1.284L8 8H6.833l-.435-1.286zm1.634-.736L5.5 3.956h-.049l-.679 2.022z"/><path d="M0 2a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v3h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-3H2a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1zm7.138 9.995q.289.451.63.846c-.748.575-1.673 1.001-2.768 1.292c.178.217.451.635.555.867c1.125-.359 2.08-.844 2.886-1.494c.777.665 1.739 1.165 2.93 1.472c.133-.254.414-.673.629-.89c-1.125-.253-2.057-.694-2.82-1.284c.681-.747 1.222-1.651 1.621-2.757H14V8h-3v1.047h.765c-.318.844-.74 1.546-1.272 2.13a6 6 0 0 1-.415-.492a2 2 0 0 1-.94.31"/></g></svg>
       </button>
       <button class="btn ghost" onclick="closeLicense()">Fermer</button>
     </div>
   </div>
 </div>
+<div class="modal-overlay" id="powerModal">
+  <div class="modal-box">
+    <h3><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" fill-rule="evenodd"><path fill="currentColor" d="M13.5 3a1.5 1.5 0 0 0-3 0v10a1.5 1.5 0 0 0 3 0zM7.854 5.75a1.5 1.5 0 1 0-1.661-2.5A10.49 10.49 0 0 0 1.5 12c0 5.799 4.701 10.5 10.5 10.5S22.5 17.799 22.5 12c0-3.654-1.867-6.87-4.693-8.75a1.5 1.5 0 0 0-1.66 2.5a7.5 7.5 0 1 1-8.292 0Z"/></g></svg>Système</h3>
+    <p>Le serveur Luanti sera arrêté proprement avant l'action choisie.</p>
+    <div class="modal-actions" style="justify-content:space-between">
+      <button class="btn ghost" id="powerCancelBtn" onclick="closePowerModal()">Annuler</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn ghost" onclick="confirmPanelRestart()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+          Redémarrer le panel
+        </button>
+        <button class="btn danger" onclick="confirmPanelShutdown()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+          Éteindre le panel
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 <script>
 const ICONS = {
-  folder: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><title xmlns="">folder</title><path fill="currentColor" d="M4 20q-.825 0-1.412-.587T2 18V6q0-.825.588-1.412T4 4h6l2 2h8q.825 0 1.413.588T22 8v10q0 .825-.587 1.413T20 20z"/></svg>',
-  file: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><title xmlns="">file</title><path fill="currentColor" d="M13 9V3.5L18.5 9M6 2c-1.11 0-2 .89-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/></svg>',
-  package: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><title xmlns="">package-filled</title><path fill="currentColor" d="M21.93 7.67a1 1 0 0 0-.07-.17c-.02-.03-.04-.05-.06-.08c-.03-.04-.06-.09-.1-.13c-.03-.03-.06-.04-.08-.07c-.04-.03-.07-.06-.11-.09h-.01l-9.01-5a.99.99 0 0 0-.97 0l-9.01 5H2.5c-.04.02-.08.06-.11.09a.3.3 0 0 0-.08.07c-.04.04-.07.08-.1.13c-.02.03-.04.05-.06.08c-.03.05-.05.11-.07.17c0 .02-.02.05-.03.07c-.02.08-.04.17-.04.26v8c0 .36.2.7.51.87l9 5s.1.04.14.06c.03.01.06.03.09.03a1.1 1.1 0 0 0 .5 0c.03 0 .06-.02.09-.03c.05-.02.1-.03.14-.06l9-5c.32-.18.51-.51.51-.87V8c0-.09-.01-.18-.04-.26c0-.03-.02-.05-.03-.07ZM12 4.15l6.94 3.86l-2.44 1.36l-6.94-3.86zm-4.5 2.5l6.94 3.86L12 11.87L5.06 8.01zM20 15.42l-7 3.89V13.6l2.5-1.39v3.21l2-1.11V11.1L20 9.71z"/></svg>',
-  trash: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><title xmlns="">delete-rounded</title><path fill="currentColor" d="M7 21q-.825 0-1.412-.587T5 19V6q-.425 0-.712-.288T4 5t.288-.712T5 4h4q0-.425.288-.712T10 3h4q.425 0 .713.288T15 4h4q.425 0 .713.288T20 5t-.288.713T19 6v13q0 .825-.587 1.413T17 21zm3.713-4.288Q11 16.426 11 16V9q0-.425-.288-.712T10 8t-.712.288T9 9v7q0 .425.288.713T10 17t.713-.288m4 0Q15 16.426 15 16V9q0-.425-.288-.712T14 8t-.712.288T13 9v7q0 .425.288.713T14 17t.713-.288"/></svg>',
+  folder: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M4 20q-.825 0-1.412-.587T2 18V6q0-.825.588-1.412T4 4h6l2 2h8q.825 0 1.413.588T22 8v10q0 .825-.587 1.413T20 20z"/></svg>',
+  file: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M13 9V3.5L18.5 9M6 2c-1.11 0-2 .89-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/></svg>',
+  package: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M21.93 7.67a1 1 0 0 0-.07-.17c-.02-.03-.04-.05-.06-.08c-.03-.04-.06-.09-.1-.13c-.03-.03-.06-.04-.08-.07c-.04-.03-.07-.06-.11-.09h-.01l-9.01-5a.99.99 0 0 0-.97 0l-9.01 5H2.5c-.04.02-.08.06-.11.09a.3.3 0 0 0-.08.07c-.04.04-.07.08-.1.13c-.02.03-.04.05-.06.08c-.03.05-.05.11-.07.17c0 .02-.02.05-.03.07c-.02.08-.04.17-.04.26v8c0 .36.2.7.51.87l9 5s.1.04.14.06c.03.01.06.03.09.03a1.1 1.1 0 0 0 .5 0c.03 0 .06-.02.09-.03c.05-.02.1-.03.14-.06l9-5c.32-.18.51-.51.51-.87V8c0-.09-.01-.18-.04-.26c0-.03-.02-.05-.03-.07ZM12 4.15l6.94 3.86l-2.44 1.36l-6.94-3.86zm-4.5 2.5l6.94 3.86L12 11.87L5.06 8.01zM20 15.42l-7 3.89V13.6l2.5-1.39v3.21l2-1.11V11.1L20 9.71z"/></svg>',
+  trash: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M7 21q-.825 0-1.412-.587T5 19V6q-.425 0-.712-.288T4 5t.288-.712T5 4h4q0-.425.288-.712T10 3h4q.425 0 .713.288T15 4h4q.425 0 .713.288T20 5t-.288.713T19 6v13q0 .825-.587 1.413T17 21zm3.713-4.288Q11 16.426 11 16V9q0-.425-.288-.712T10 8t-.712.288T9 9v7q0 .425.288.713T10 17t.713-.288m4 0Q15 16.426 15 16V9q0-.425-.288-.712T14 8t-.712.288T13 9v7q0 .425.288.713T14 17t.713-.288"/></svg>',
   inbox: '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></svg>',
   chevronUp: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 640 640"><path fill="currentColor" d="M160 288c-12.9 0-24.6-7.8-29.6-19.8s-2.2-25.7 7-34.8l160-160c12.5-12.5 32.8-12.5 45.3 0l160 160c9.2 9.2 11.9 22.9 6.9 34.9S492.9 288 480 288z"/></svg>',
   chevronDown: '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 640 640"><path fill="currentColor" d="M160 352c-12.9 0-24.6 7.8-29.6 19.8s-2.2 25.7 7 34.8l160 160c12.5 12.5 32.8 12.5 45.3 0l160-160c9.2-9.2 11.9-22.9 6.9-34.9S492.9 352 480 352z"/></svg>',
@@ -1225,7 +1257,7 @@ async function installGit(){
   await withAction('Clonage du dépôt git…', async ()=>{
     const r = await api('/api/mods/git',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});
     const d = await r.json();
-    if(!r.ok) alert('Erreur : '+d.error);
+    if(!r.ok) showAlertBox('Erreur : '+d.error);
     document.getElementById('gitUrl').value='';
     loadMods();
   });
@@ -1236,7 +1268,7 @@ async function uploadZip(file){
     const fd = new FormData(); fd.append('file', file);
     const r = await api('/api/mods/upload',{method:'POST',body:fd});
     const d = await r.json();
-    if(!r.ok) alert('Erreur : '+d.error);
+    if(!r.ok) showAlertBox('Erreur : '+d.error);
     loadMods();
   });
 }
@@ -1329,14 +1361,14 @@ async function saveConfigFields(){
   await withAction('Enregistrement de la configuration…', async ()=>{
     const r = await api('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields})});
     const d = await r.json();
-    if(r.ok){ loadConfig(); } else { alert('Erreur : '+d.error); }
+    if(r.ok){ loadConfig(); } else { showAlertBox('Erreur : '+d.error); }
   });
 }
 async function saveRawConfig(){
   const raw = document.getElementById('rawConfig').value;
   await withAction('Enregistrement du fichier brut…', async ()=>{
     const r = await api('/api/config/raw',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({raw})});
-    if(r.ok){ loadConfig(); } else { const d = await r.json(); alert('Erreur : '+d.error); }
+    if(r.ok){ loadConfig(); } else { const d = await r.json(); showAlertBox('Erreur : '+d.error); }
   });
 }
 let debugLines = [];
@@ -1427,14 +1459,14 @@ async function checkUpdateVersion(){
     }
     document.getElementById('updateDot').style.display = d.update_available ? 'block' : 'none';
     const statusHtml = d.update_available
-      ? `<div class="vc-status available"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><title xmlns="">notifications-rounded</title><path fill="currentColor" d="M5 19q-.425 0-.712-.288T4 18t.288-.712T5 17h1v-7q0-2.075 1.25-3.687T10.5 4.2v-.7q0-.625.438-1.062T12 2t1.063.438T13.5 3.5v.7q2 .5 3.25 2.113T18 10v7h1q.425 0 .713.288T20 18t-.288.713T19 19zm7 3q-.825 0-1.412-.587T10 20h4q0 .825-.587 1.413T12 22"/></svg>Nouvelle version disponible</div>`
-      : `<div class="vc-status uptodate"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><title xmlns="">check-rounded</title><path fill="currentColor" d="m9.55 15.15l8.475-8.475q.3-.3.7-.3t.7.3t.3.713t-.3.712l-9.175 9.2q-.3.3-.7.3t-.7-.3L4.55 13q-.3-.3-.288-.712t.313-.713t.713-.3t.712.3z"/></svg>Le panel est à jour</div>`;
+      ? `<div class="vc-status available"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M5 19q-.425 0-.712-.288T4 18t.288-.712T5 17h1v-7q0-2.075 1.25-3.687T10.5 4.2v-.7q0-.625.438-1.062T12 2t1.063.438T13.5 3.5v.7q2 .5 3.25 2.113T18 10v7h1q.425 0 .713.288T20 18t-.288.713T19 19zm7 3q-.825 0-1.412-.587T10 20h4q0 .825-.587 1.413T12 22"/></svg>Nouvelle version disponible</div>`
+      : `<div class="vc-status uptodate"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="m9.55 15.15l8.475-8.475q.3-.3.7-.3t.7.3t.3.713t-.3.712l-9.175 9.2q-.3.3-.7.3t-.7-.3L4.55 13q-.3-.3-.288-.712t.313-.713t.713-.3t.712.3z"/></svg>Le panel est à jour</div>`;
     el.innerHTML = `
       <div class="vc-row"><span class="vc-label">Version actuelle</span><span class="vc-value">v${d.current_version}</span></div>
       <div class="vc-row"><span class="vc-label">Version sur GitHub</span><span class="vc-value">v${d.remote_version}</span></div>
       ${statusHtml}`;
   }catch(e){
-    el.innerHTML = `<div class="vc-status error"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><title xmlns="">warning-rounded</title><path fill="currentColor" d="M2.725 21q-.275 0-.5-.137t-.35-.363t-.137-.488t.137-.512l9.25-16q.15-.25.388-.375T12 3t.488.125t.387.375l9.25 16q.15.25.138.513t-.138.487t-.35.363t-.5.137zm9.988-3.287Q13 17.425 13 17t-.288-.712T12 16t-.712.288T11 17t.288.713T12 18t.713-.288m0-3Q13 14.425 13 14v-3q0-.425-.288-.712T12 10t-.712.288T11 11v3q0 .425.288.713T12 15t.713-.288"/></svg>Impossible de vérifier la version (problème réseau).</div>`;
+    el.innerHTML = `<div class="vc-status error"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M2.725 21q-.275 0-.5-.137t-.35-.363t-.137-.488t.137-.512l9.25-16q.15-.25.388-.375T12 3t.488.125t.387.375l9.25 16q.15.25.138.513t-.138.487t-.35.363t-.5.137zm9.988-3.287Q13 17.425 13 17t-.288-.712T12 16t-.712.288T11 17t.288.713T12 18t.713-.288m0-3Q13 14.425 13 14v-3q0-.425-.288-.712T12 10t-.712.288T11 11v3q0 .425.288.713T12 15t.713-.288"/></svg>Impossible de vérifier la version (problème réseau).</div>`;
   }
 }
 function closeUpdateModal(){
@@ -1537,6 +1569,34 @@ function closeLicense(){
 document.getElementById("licenseModal").addEventListener("click", e=>{
   if(e.target.id==="licenseModal") closeLicense();
 });
+let powerActionInProgress = false;
+function power(){
+  document.getElementById('powerModal').style.display = 'flex';
+}
+function closePowerModal(){
+  if(powerActionInProgress) return;
+  document.getElementById('powerModal').style.display = 'none';
+}
+document.getElementById('powerModal').addEventListener('click', e=>{
+  if(e.target.id === 'powerModal') closePowerModal();
+});
+async function confirmPanelRestart(){
+  if(!confirm('Redémarrer le panel ? Le serveur Luanti sera arrêté puis le panel relancé.')) return;
+  powerActionInProgress = true;
+  await withAction('Redémarrage du panel…', async ()=>{
+    try{ await api('/api/panel/restart_panel', {method:'POST'}); }catch(e){}
+  });
+  setTimeout(()=>{ location.href = '/login'; }, 2500);
+}
+async function confirmPanelShutdown(){
+  if(!confirm('Éteindre complètement le panel ? Tu devras relancer le script manuellement pour y accéder à nouveau.')) return;
+  powerActionInProgress = true;
+  await withAction('Extinction du panel…', async ()=>{
+    try{ await api('/api/panel/shutdown', {method:'POST'}); }catch(e){}
+  });
+  document.getElementById('powerModal').style.display = 'none';
+  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#8a8f98;background:#0d0f14">Le panel a été éteint. Relance le script pour y accéder à nouveau.</div>';
+}
 refreshStatus();
 loadPanelVersion();
 checkUpdateBadge();
@@ -1877,20 +1937,70 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._send_json({"ok": True})
             schedule_panel_restart()
+        elif path == "/api/panel/restart_panel":
+            try:
+                stop_server()
+            except Exception:
+                pass
+            self._send_json({"ok": True})
+            schedule_panel_restart()
+        elif path == "/api/panel/shutdown":
+            try:
+                stop_server()
+            except Exception:
+                pass
+            self._send_json({"ok": True})
+            schedule_panel_shutdown()
         else:
             self._send_json({"error": "not found"}, 404)
+def get_local_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    finally:
+        s.close()
 def main():
     if PASSWORD == "change-moi-STP":
         print("!! ATTENTION : change la variable PASSWORD en haut du fichier avant usage.")
     os.makedirs(MODS_DIR, exist_ok=True)
     os.makedirs(WORLD_DIR, exist_ok=True)
     os.makedirs(FILES_ROOT, exist_ok=True)
+    ip = get_local_ip()
+    zeroconf = Zeroconf()
+    info = ServiceInfo(
+        "_https._tcp.local.",
+        "Luanti Panel._https._tcp.local.",
+        addresses=[socket.inet_aton(ip)],
+        port=PORT,
+        properties={
+            b"path": b"/",
+            b"version": PANEL_VERSION.encode()
+        },
+        server="luantipanel.local.",
+    )
+    try:
+        zeroconf.register_service(info)
+        print(f"Service mDNS publié : Luanti Panel -> {ip}:{PORT}")
+    except Exception as e:
+        print(f"Impossible de publier le service mDNS : {e}")
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f"Luanti Panel en écoute sur http://{HOST}:{PORT} (version {PANEL_VERSION})")
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(certfile="cert.pem", keyfile="key.pem")
+    httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
+    print(f"Luanti Panel en écoute sur :")
+    print(f"  https://{ip}:{PORT}")
+    print(f"  https://luantipanel.local:{PORT}")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         print("\nArrêt du panneau.")
+    finally:
+        try:
+            zeroconf.unregister_service(info)
+            zeroconf.close()
+        except Exception:
+            pass
         if server_process is not None and server_process.poll() is None:
             stop_server()
 if __name__ == "__main__":
