@@ -18,8 +18,9 @@ from urllib.error import URLError, HTTPError
 import ssl
 from zeroconf import Zeroconf, ServiceInfo
 import socket
+import getpass
 PASSWORD = "Survivalier14."
-PANEL_VERSION = "5"
+PANEL_VERSION = "6"
 HOST = "0.0.0.0"
 PORT = 8877
 LUANTI_BIN = "luanti"
@@ -728,25 +729,37 @@ input:checked + .slider:before{transform:translateX(18px)}
     scrollbar-width: thin;
     scrollbar-color: #777 transparent;
 }
-#console::-webkit-scrollbar {
+
+#console::-webkit-scrollbar,
+#debugConsole::-webkit-scrollbar {
     width: 5px;
 }
-#console::-webkit-scrollbar-track {
+
+#console::-webkit-scrollbar-track,
+#debugConsole::-webkit-scrollbar-track {
     background: transparent;
 }
-#console::-webkit-scrollbar-thumb {
+
+#console::-webkit-scrollbar-thumb,
+#debugConsole::-webkit-scrollbar-thumb {
     background: #777;
     border-radius: 999px;
 }
-#console::-webkit-scrollbar-thumb:hover {
+
+#console::-webkit-scrollbar-thumb:hover,
+#debugConsole::-webkit-scrollbar-thumb:hover {
     background: #999;
 }
-#console::-webkit-scrollbar-button {
+
+#console::-webkit-scrollbar-button,
+#debugConsole::-webkit-scrollbar-button {
     display: none;
     width: 0;
     height: 0;
 }
-#console::-webkit-scrollbar-corner {
+
+#console::-webkit-scrollbar-corner,
+#debugConsole::-webkit-scrollbar-corner {
     background: transparent;
 }
 .modal-overlay{position:fixed;inset:0;background:rgba(5,6,10,.68);backdrop-filter:blur(2px);display:none;align-items:center;justify-content:center;z-index:300;padding:16px}
@@ -1623,8 +1636,7 @@ document.addEventListener('keydown', e=>{
 refreshStatus();
 loadPanelVersion();
 checkUpdateBadge();
-</script>
-</body></html>"""
+</script>"""
 class Handler(BaseHTTPRequestHandler):
     server_version = "LuantiPanel/1.0"
     def log_message(self, fmt, *args):
@@ -1983,9 +1995,93 @@ def get_local_ip():
         return s.getsockname()[0]
     finally:
         s.close()
+CERT_DIR = os.path.join(os.path.expanduser("~"), "Luanti Panel Data")
+CERT_FILE = os.path.join(CERT_DIR, "cert.pem")
+KEY_FILE = os.path.join(CERT_DIR, "key.pem")
+def generate_certificate():
+    os.makedirs(CERT_DIR, exist_ok=True)
+    regenerate = True
+    if os.path.isfile(CERT_FILE) and os.path.isfile(KEY_FILE):
+        try:
+            result = subprocess.run(
+                [
+                    "openssl",
+                    "x509",
+                    "-checkend",
+                    "0",
+                    "-noout",
+                    "-in",
+                    CERT_FILE,
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            if result.returncode == 0:
+                regenerate = False
+        except Exception:
+            regenerate = True
+    if not regenerate:
+        return
+    print("Génération d'un nouveau certificat HTTPS...")
+    for f in (CERT_FILE, KEY_FILE):
+        try:
+            if os.path.isfile(f):
+                os.remove(f)
+        except OSError:
+            pass
+    ip = get_local_ip()
+    subprocess.run(
+        [
+            "openssl",
+            "req",
+            "-x509",
+            "-newkey", "rsa:2048",
+            "-nodes",
+            "-days", "3650",
+            "-keyout", KEY_FILE,
+            "-out", CERT_FILE,
+            "-subj",
+            "/C=FR/ST=Ile-de-France/L=Paris/O=Survivalier/OU=Luanti Panel/CN=luantipanel.local",
+            "-addext",
+            f"subjectAltName=DNS:luantipanel.local,IP:{ip}",
+        ],
+        check=True
+    )
+    if not os.path.isfile(CERT_FILE):
+        raise FileNotFoundError(f"Certificat introuvable : {CERT_FILE}")
+    if not os.path.isfile(KEY_FILE):
+        raise FileNotFoundError(f"Clé privée introuvable : {KEY_FILE}")
+    print("Nouveau certificat HTTPS généré.")
+    print(f"  Certificat : {CERT_FILE}")
+    print(f"  Clé privée : {KEY_FILE}")
+def setup_password():
+    while True:
+        password = getpass.getpass("Définir un mot-de-passe pour Luanti Panel : ")
+        if len(password) < 4:
+            print("Le mot de passe doit contenir au moins 4 caractères.")
+            continue
+        confirm = getpass.getpass("Confirmer le mot de passe : ")
+        if password != confirm:
+            print("Les mots de passe ne correspondent pas.\n")
+            continue
+        break
+    with open(__file__, "r", encoding="utf-8") as f:
+        source = f.read()
+    source = re.sub(
+        r'^PASSWORD\s*=\s*".*?"',
+        f'PASSWORD = "{password}"',
+        source,
+        flags=re.MULTILINE
+    )
+    with open(__file__, "w", encoding="utf-8") as f:
+        f.write(source)
+    print("\nMot de passe enregistré.")
+    print("Redémarrage de Luanti Panel...\n")
+    os.execv(sys.executable, [sys.executable] + sys.argv)
 def main():
+    generate_certificate()
     if PASSWORD == "change-moi-STP":
-        print("!! ATTENTION : change la variable PASSWORD en haut du fichier avant usage.")
+      setup_password()
     os.makedirs(MODS_DIR, exist_ok=True)
     os.makedirs(WORLD_DIR, exist_ok=True)
     os.makedirs(FILES_ROOT, exist_ok=True)
@@ -2004,15 +2100,19 @@ def main():
     )
     try:
         zeroconf.register_service(info)
-        print(f"Service mDNS publié : Luanti Panel -> {ip}:{PORT}")
     except Exception as e:
         print(f"Impossible de publier le service mDNS : {e}")
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    context.load_cert_chain(certfile="cert.pem", keyfile="key.pem")
-    httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
+    context.load_cert_chain(
+        certfile=CERT_FILE,
+        keyfile=KEY_FILE
+    )
+    httpd.socket = context.wrap_socket(
+        httpd.socket,
+        server_side=True
+    )
     print(f"Luanti Panel en écoute sur :")
-    print(f"  https://{ip}:{PORT}")
     print(f"  https://luantipanel.local:{PORT}")
     try:
         httpd.serve_forever()
