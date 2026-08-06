@@ -18,8 +18,8 @@ from urllib.error import URLError, HTTPError
 import ssl
 from zeroconf import Zeroconf, ServiceInfo
 import socket
-PASSWORD = "Change-moi-STP"
-PANEL_VERSION = "4"
+PASSWORD = "Survivalier14."
+PANEL_VERSION = "5"
 HOST = "0.0.0.0"
 PORT = 8877
 LUANTI_BIN = "luanti"
@@ -1039,6 +1039,15 @@ input:checked + .slider:before{transform:translateX(18px)}
     </div>
   </div>
 </div>
+<div class="modal-overlay" id="alertModal">
+  <div class="modal-box" style="max-width:380px">
+    <h3 id="alertModalTitle"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>Erreur</h3>
+    <p id="alertModalMessage" style="margin-bottom:0"></p>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeAlertBox()">OK</button>
+    </div>
+  </div>
+</div>
 <script>
 const ICONS = {
   folder: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M4 20q-.825 0-1.412-.587T2 18V6q0-.825.588-1.412T4 4h6l2 2h8q.825 0 1.413.588T22 8v10q0 .825-.587 1.413T20 20z"/></svg>',
@@ -1597,6 +1606,20 @@ async function confirmPanelShutdown(){
   document.getElementById('powerModal').style.display = 'none';
   document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#8a8f98;background:#0d0f14">Le panel a été éteint. Relance le script pour y accéder à nouveau.</div>';
 }
+function showAlertBox(message, title){
+  document.getElementById('alertModalTitle').innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>' + (title || 'Erreur');
+  document.getElementById('alertModalMessage').textContent = message;
+  document.getElementById('alertModal').style.display = 'flex';
+}
+function closeAlertBox(){
+  document.getElementById('alertModal').style.display = 'none';
+}
+document.getElementById('alertModal').addEventListener('click', e=>{
+  if(e.target.id === 'alertModal') closeAlertBox();
+});
+document.addEventListener('keydown', e=>{
+  if(e.key === 'Escape' && document.getElementById('alertModal').style.display === 'flex') closeAlertBox();
+});
 refreshStatus();
 loadPanelVersion();
 checkUpdateBadge();
