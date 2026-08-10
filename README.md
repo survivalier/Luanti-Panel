@@ -28,6 +28,10 @@ La mise à jour se fait directement depuis l'interface du panel et télécharge 
 ACCESSIBILITÉ WEB
 ------------------------------------------------------------------------------
 Il est possible d'accéder au panel depuis le web via l'adresse suivante: `https://luantipanel.local:8877/`
+> [!NOTE]
+> Lors du premier accès, vôtre navigateur peux vous afficher que le site n'est pas sécuriser malgré le `https://`<br/>
+> C'est normal, le script python va générer un Certificat OpenSSL pour le site web, ce qui provoque l'erreur.</br>
+> Le certificat est valide 1 ans.
 
 ------------------------------------------------------------------------------
 PRÉREQUIS ET INFORMATIONS
@@ -41,9 +45,9 @@ PRÉREQUIS ET INFORMATIONS
 > ```bash
 > pkg install luanti -y
 > ```
-> Le panel crée ou utilise un monde spécifique pour le serveur nomer `world`
-> Il faut aussi installer un jeux pour que le serveur puissent démarer (prérequis Luanti)<br/>
-> Installer Minetest Game si aucun jeux n'est déja installer
+> Le panel crée ou utilise un monde spécifique pour le serveur nommer `world`
+> Il faut aussi installer un jeux pour que le serveur puissent démarrer (prérequis Luanti)<br/>
+> Installer Minetest Game si aucun jeux n'est déjà installer
 > ```bash
 > cd ~/.minetest/games/
 > git clone https://github.com/luanti-org/minetest_game.git
