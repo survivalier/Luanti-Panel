@@ -43,10 +43,11 @@ PRÉREQUIS ET INFORMATIONS
 > ```
 > Le panel crée ou utilise un monde spécifique pour le serveur nomer `world`
 > Il faut aussi installer un jeux pour que le serveur puissent démarer (prérequis Luanti)
+> Cloner le dépot dans `~/.minetest/games/`
 > ```bash
+> cd ~/.minetest/games/
 > git clone https://github.com/luanti-org/minetest_game.git
 > ```
-> Cloner le dépot dans `~/.minetest/games/`
 
 Python 3.14 +
 ```bash
