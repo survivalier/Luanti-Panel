@@ -20,7 +20,7 @@ CONFIGURATION - ET MISE À JOUR
 > 
 La mise à jour se fait directement depuis l'interface du panel et télécharge le code depuis github.com
 
-> [!IMPORTANT]
+> [!TIP]
 > Il vous sera demander de rentrer mot de passe, vous pouvez donc en entrer un nouveau ou le laisser identique.
 ------------------------------------------------------------------------------
 Accessibilité web
