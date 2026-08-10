@@ -1,5 +1,5 @@
 # Luanti Server Panel
-Panneau web pour administrer un serveur Luanti (Minetest) :
+> Panneau web pour administrer un serveur Luanti (Minetest) :
 - démarrer / arrêter le serveur
 - voir la console en direct + envoyer des commandes
 - gérer les mods (upload zip, clone git, suppression, activation dans world.mt)
