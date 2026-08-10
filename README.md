@@ -41,6 +41,12 @@ PRÉREQUIS ET INFORMATIONS
 > ```bash
 > pkg install luanti -y
 > ```
+> Le panel crée ou utilise un monde spécifique pour le serveur: 'world'
+> Il faut aussi installer un jeux pour que le serveur puissent démarer (prérequis Luanti)
+> ```bash
+> git clone https://github.com/luanti-org/minetest_game.git
+> ```
+> Cloner le dépot dans `~/.minetest/games/`
 
 Python 3.14 +
 ```bash
