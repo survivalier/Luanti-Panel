@@ -34,7 +34,7 @@ PRÉREQUIS ET INFORMATIONS
 ------------------------------------------------------------------------------
 > [!NOTE]
 > Le panel est fournis pour `Luanti 5.16` et les versions supérieures, aucune garantie n'est fournis pour les versions antérieures.<br/>
-> Il est aussi fournis pour `Termux 0.119.0-beta.3`
+> Le panel est fournis pour `Termux 0.119.0-beta.3`
 
 > [!IMPORTANT]
 > Luanti doit être installer dans Termux
