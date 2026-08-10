@@ -16,3 +16,4 @@ CONFIGURATION — modifie ces valeurs avant de lancer
 ------------------------------------------------------------------------------
 Changer le mot de passe depuis
 `PASSWORD = "change-moi-STP"`
+La configuration du mot de passe, s'effectue automatiquement dans le shell au lancement
