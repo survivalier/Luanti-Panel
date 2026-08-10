@@ -14,6 +14,10 @@ paquets, uniquement l'état de la table des sockets du système).
 ------------------------------------------------------------------------------
 CONFIGURATION — modifie ces valeurs avant de lancer
 ------------------------------------------------------------------------------
-Changer le mot de passe depuis
-`PASSWORD = "change-moi-STP"`
-La configuration du mot de passe, s'effectue automatiquement dans le shell au lancement
+> [!CAUTION]
+> Le changement du mot de passe est obligatoire pour le lancement du panel<br/>Il est possible de le changer depuis le code dans la variable `PASSWORD = "change-moi-STP"`
+> Le changement du mot de passe est possible depuis un premier démarage dans le shell
+------------------------------------------------------------------------------
+Accessibilité web
+------------------------------------------------------------------------------
+Il est possible d'accéder au panel depuis le web via 
