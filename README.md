@@ -25,4 +25,4 @@ La mise à jour se fait directement depuis l'interface du panel et télécharge 
 ------------------------------------------------------------------------------
 Accessibilité web
 ------------------------------------------------------------------------------
-Il est possible d'accéder au panel depuis le web via 
+Il est possible d'accéder au panel depuis le web via l'adresse suivante: `https://luantipanel.local:8877/`
