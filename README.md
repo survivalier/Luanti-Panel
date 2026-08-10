@@ -42,8 +42,8 @@ PRÉREQUIS ET INFORMATIONS
 > pkg install luanti -y
 > ```
 > Le panel crée ou utilise un monde spécifique pour le serveur nomer `world`
-> Il faut aussi installer un jeux pour que le serveur puissent démarer (prérequis Luanti)
-> Cloner le dépot dans `~/.minetest/games/`
+> Il faut aussi installer un jeux pour que le serveur puissent démarer (prérequis Luanti)<br/>
+> Installer Minetest Game si aucun jeux n'est déja installer
 > ```bash
 > cd ~/.minetest/games/
 > git clone https://github.com/luanti-org/minetest_game.git
