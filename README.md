@@ -33,7 +33,7 @@ Il est possible d'accéder au panel depuis le web via l'adresse suivante: `https
 PRÉREQUIS ET INFORMATIONS
 ------------------------------------------------------------------------------
 > [!NOTE]
-> Le panel est fournis pour `Luanti 5.16` et les versions supérieures, aucune garantie n'est fournis pour les versions antérieures.
+> Le panel est fournis pour `Luanti 5.16` et les versions supérieures, aucune garantie n'est fournis pour les versions antérieures.<br/>
 > Il est aussi fournis pour `Termux 0.119.0-beta.3`
 
 > [!IMPORTANT]
