@@ -11,6 +11,7 @@ Ne dépend que de la bibliothèque standard Python. `git` est appelé en
 sous-processus uniquement pour la fonction "installer un mod depuis un dépôt",
 et `ss`/`netstat` pour lister les connexions actives (aucune capture de
 paquets, uniquement l'état de la table des sockets du système).
+
 ------------------------------------------------------------------------------
 CONFIGURATION - ET MISE À JOUR
 ------------------------------------------------------------------------------
@@ -22,7 +23,42 @@ La mise à jour se fait directement depuis l'interface du panel et télécharge 
 
 > [!TIP]
 > Il vous sera demander de rentrer mot de passe, vous pouvez donc en entrer un nouveau ou le laisser identique.
+
 ------------------------------------------------------------------------------
-Accessibilité web
+ACCESSIBILITÉ WEB
 ------------------------------------------------------------------------------
 Il est possible d'accéder au panel depuis le web via l'adresse suivante: `https://luantipanel.local:8877/`
+
+------------------------------------------------------------------------------
+PRÉREQUIS ET INFORMATIONS
+------------------------------------------------------------------------------
+> [!NOTE]
+> Le panel est fournis pour Luanti 5.16 et les versions supérieures, aucune garantie n'est fournis pour les versions antérieures.
+> Il est aussi fournis pour Termux 0.119.0-beta.3
+
+> [!IMPORTANT]
+> Luanti doit être installer dans Termux
+> ```bash
+> pkg install luanti -y
+> ```
+
+Python 3.14 +
+```bash
+pkg install python python-pip
+```
+Zeroconf
+```bash
+pip install zeroconf
+```
+Git
+```bash
+pkg install git
+```
+iproute2
+```bash
+pkg install iproute2
+```
+OpenSSL
+```bash
+pkg install openssl
+```
