@@ -20,7 +20,7 @@ from zeroconf import Zeroconf, ServiceInfo
 import socket
 import getpass
 PASSWORD = "change-moi-STP"
-PANEL_VERSION = "6"
+PANEL_VERSION = "2"
 HOST = "0.0.0.0"
 PORT = 8877
 LUANTI_BIN = "luanti"
