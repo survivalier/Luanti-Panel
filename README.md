@@ -33,7 +33,12 @@ Il est possible d'accéder au panel depuis le web via l'adresse suivante: `https
 > C'est normal, le script python va générer un Certificat OpenSSL pour le site web, ce qui provoque l'erreur.</br>
 > Le certificat est valide 1 ans.
 
-Le support de langues est actifs, il est possible de crée dynamiquement des fichiers `/lang/<code>.json`
+Le support de langues actifs depuis la v3.
+> [!NOTE]
+> Les langues incluses par défaut sont le Français et l'Anglais<br/>
+> Un model de traduction pour la v3 est disponnible<br/>
+> [Model de traduction](TRANSLATE.md)
+
 
 ------------------------------------------------------------------------------
 PRÉREQUIS ET INFORMATIONS
