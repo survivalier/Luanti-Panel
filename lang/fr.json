@@ -1,0 +1,45 @@
+{
+  "_meta": { "name": "Français", "flag": "🇫🇷" },
+
+  "Se connecter": "Se connecter",
+  "Connexion": "Connexion",
+  "Mot de passe": "Mot de passe",
+  "Se souvenir de moi": "Se souvenir de moi",
+  "Mot de passe incorrect.": "Mot de passe incorrect.",
+
+  "Démarrer": "Démarrer",
+  "Arrêter": "Arrêter",
+  "Redémarrer": "Redémarrer",
+  "Démarrer le serveur": "Démarrer le serveur",
+  "Arrêter le serveur": "Arrêter le serveur",
+  "Redémarrer le serveur": "Redélarrer le serveur",
+  "Serveur démarré.": "Serveur démarré.",
+  "Serveur arrêté.": "Serveur arrêter.",
+  "Le serveur tourne déjà.": "Le serveur tourne déja.",
+  "Le serveur n'est pas en cours d'exécution.": "Le serveur n'est pas en cours d'exécution.",
+
+  "Console": "Console",
+  "Envoyer": "Envoyer",
+  "Commande": "Commande",
+
+  "Mods": "Mods",
+  "Fichiers": "Fichiers",
+  "Configuration": "Configuration",
+  "Réseau": "Réseau",
+  "Journal": "Journal",
+  "Paramètres": "Paramètres",
+
+  "Supprimer": "Supprimer",
+  "Télécharger": "Télécharger",
+  "Importer": "Importer",
+  "Nouveau dossier": "Nouveau dossier",
+  "Enregistrer": "Enregistrer",
+  "Annuler": "Annuler",
+  "Fermer": "Fermer",
+
+  "Vérifier les mises à jour": "Vérifier les mises à jour",
+  "Une mise à jour est disponible.": "Une mise à jour est disponible.",
+  "Le panel est à jour.": "Le panel est à jour",
+
+  "Déconnexion": "Déconnexion"
+}
