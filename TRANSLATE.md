@@ -1,3 +1,5 @@
+> [!TIP]
+> Ce model de traduction est fournis pour la version 3 du panel
 ```json
 {
   "_meta": { "name": "English", "flag": "🇬🇧" },
