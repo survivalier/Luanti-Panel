@@ -20,7 +20,7 @@ from zeroconf import Zeroconf, ServiceInfo
 import socket
 import getpass
 PASSWORD = "change-moi-STP"
-PANEL_VERSION = "2"
+PANEL_VERSION = "3"
 HOST = "0.0.0.0"
 PORT = 8877
 LUANTI_BIN = "luanti"
@@ -31,7 +31,7 @@ CONFIG_FILE = os.path.expanduser("~/.minetest/minetest.conf")
 DEBUG_FILE = os.path.expanduser("~/.minetest/debug.txt")
 EXTRA_ARGS = ["--server", "--world", WORLD_DIR]
 SCRIPT_PATH = os.path.abspath(__file__)
-UPDATE_URL = "https://raw.githubusercontent.com/survivalier/Luanti-Panel/refs/heads/main/main.py"
+UPDATE_URL = "https://raw.githubusercontent.com/survivalier/Luanti-Panel/refs/heads/english/main.py"
 CONSOLE_BUFFER_SIZE = 2000
 PASSWORD_HASH = hashlib.sha256(PASSWORD.encode()).hexdigest()
 SESSIONS = {}
@@ -196,6 +196,37 @@ def schedule_panel_shutdown(delay=0.5):
         console_push("[panel] Extinction du panel demandée.")
         os._exit(0)
     threading.Thread(target=_do_shutdown, daemon=True).start()
+LANG_DIR = os.path.join(os.path.dirname(SCRIPT_PATH), "lang")
+def safe_lang_path(code):
+    """Empêche toute évasion du dossier LANG_DIR (path traversal) pour les fichiers de traduction."""
+    code = re.sub(r"[^a-zA-Z0-9_-]", "", code or "")
+    if not code:
+        raise ValueError("Code de langue invalide.")
+    full = os.path.normpath(os.path.join(LANG_DIR, code + ".json"))
+    base = os.path.normpath(LANG_DIR)
+    if not full.startswith(base + os.sep):
+        raise ValueError("Chemin invalide.")
+    return full
+def list_available_langs():
+    """Scanne LANG_DIR et retourne la liste des langues disponibles (addons de traduction)."""
+    if not os.path.isdir(LANG_DIR):
+        return []
+    out = []
+    for fn in sorted(os.listdir(LANG_DIR)):
+        if not fn.endswith(".json"):
+            continue
+        code = fn[:-5]
+        name = code
+        flag = ""
+        try:
+            with open(os.path.join(LANG_DIR, fn), encoding="utf-8") as f:
+                meta = json.load(f).get("_meta", {})
+            name = meta.get("name", code)
+            flag = meta.get("flag", "")
+        except Exception:
+            pass
+        out.append({"code": code, "name": name, "flag": flag})
+    return out
 def safe_mod_path(relfolder):
     """Empêche toute évasion du dossier MODS_DIR (path traversal).
     Accepte soit un mod autonome ("mymod"), soit un sous-mod d'un modpack
@@ -426,6 +457,7 @@ CONFIG_FIELDS = [
      "desc": "Vitesse d'écoulement du cycle jour/nuit (72 = 1 jour réel = 20 min)."},
     {"key": "kick_msg_crash", "label": "Message de kick en cas de crash", "type": "text", "default": "",
      "desc": "Message affiché aux joueurs si le serveur plante et les déconnecte."},
+
 ]
 def read_conf_raw():
     if not os.path.exists(CONFIG_FILE):
@@ -1637,6 +1669,131 @@ refreshStatus();
 loadPanelVersion();
 checkUpdateBadge();
 </script>"""
+I18N_JS = r"""
+(function(){
+  const KEY = "panelLang";
+  let dict = {};
+  function currentLang(){
+    return localStorage.getItem(KEY) || null;
+  }
+  function apply(root){
+    root = root || document.body;
+    if (!currentLang()) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    let n;
+    while ((n = walker.nextNode())) nodes.push(n);
+    for (const node of nodes){
+      const raw = node.nodeValue;
+      const trimmed = raw.trim();
+      if (trimmed && dict[trimmed]) {
+        node.nodeValue = raw.replace(trimmed, dict[trimmed]);
+      }
+    }
+    const els = (
+      root.nodeType === 1 &&
+      root.matches &&
+      root.matches("[placeholder],[title],[aria-label]")
+    )
+      ? [root, ...root.querySelectorAll("[placeholder],[title],[aria-label]")]
+      : root.querySelectorAll
+        ? root.querySelectorAll("[placeholder],[title],[aria-label]")
+        : [];
+    els.forEach(el=>{
+      ["placeholder","title","aria-label"].forEach(attr=>{
+        const v = el.getAttribute && el.getAttribute(attr);
+        if (v && dict[v]) {
+          el.setAttribute(attr, dict[v]);
+        }
+      });
+    });
+  }
+  async function load(code){
+    if (!code) {
+      dict = {};
+      return;
+    }
+    try {
+      const res = await fetch("/lang/" + code + ".json");
+      dict = res.ok ? await res.json() : {};
+    } catch(e){
+      dict = {};
+    }
+    apply(document.body);
+  }
+  function buildSwitcher(langs){
+    if (document.getElementById("i18n-switcher")) return;
+    const sel = document.createElement("select");
+    sel.id = "i18n-switcher";
+    sel.style.cssText =
+      "position:fixed;bottom:12px;left:12px;z-index:9999;" +
+      "background:#161616;color:#eee;border:1px solid #333;" +
+      "border-radius:6px;padding:5px 8px;font-size:12px;" +
+      "font-family:inherit;cursor:pointer";
+    const optNone = document.createElement("option");
+    optNone.value = "";
+    optNone.textContent = "— Langue —";
+    sel.appendChild(optNone);
+    langs.forEach(l=>{
+      const o = document.createElement("option");
+      o.value = l.code;
+      o.textContent = (l.flag ? l.flag + " " : "") + l.name;
+      sel.appendChild(o);
+    });
+    sel.value = currentLang() || "";
+    sel.addEventListener("change", ()=>{
+      const code = sel.value;
+      if (!code) {
+        localStorage.removeItem(KEY);
+        dict = {};
+        return;
+      }
+      localStorage.setItem(KEY, code);
+      load(code);
+    });
+    document.body.appendChild(sel);
+  }
+  document.addEventListener("DOMContentLoaded", async ()=>{
+    const lang = currentLang();
+    if (lang) {
+      load(lang);
+    }
+    try {
+      const res = await fetch("/api/lang/list");
+      const langs = res.ok ? await res.json() : [];
+      if (langs.length) {
+        buildSwitcher(langs);
+      }
+    } catch(e){}
+  });
+  new MutationObserver(muts=>{
+    if (!currentLang()) return;
+    for (const m of muts) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType === 1) {
+          apply(node);
+        }
+      }
+    }
+  }).observe(document.documentElement, {
+    childList:true,
+    subtree:true
+  });
+  window.i18n = {
+    setLang: (c)=>{
+      if (!c) {
+        localStorage.removeItem(KEY);
+        dict = {};
+        return;
+      }
+      localStorage.setItem(KEY, c);
+      load(c);
+    },
+    apply,
+    currentLang
+  };
+})();
+"""
 class Handler(BaseHTTPRequestHandler):
     server_version = "LuantiPanel/1.0"
     def log_message(self, fmt, *args):
@@ -1649,6 +1806,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
     def _send_html(self, html, status=200):
+        html += '<script src="/i18n.js" defer></script>'
         body = html.encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -1751,6 +1909,31 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(check_for_update())
             except Exception as e:
                 self._send_json({"error": str(e)}, 400)
+        elif path == "/i18n.js":
+            body = I18N_JS.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/javascript; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        elif path == "/api/lang/list":
+            self._send_json(list_available_langs())
+        elif path.startswith("/lang/") and path.endswith(".json"):
+            try:
+                code = path[len("/lang/"):-len(".json")]
+                full = safe_lang_path(code)
+                if not os.path.isfile(full):
+                    raise ValueError("Langue introuvable.")
+                with open(full, encoding="utf-8") as f:
+                    data = f.read()
+                body = data.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            except Exception as e:
+                self._send_json({"error": str(e)}, 404)
         elif path == "/license":
             license_text = """MIT License
 
@@ -2085,6 +2268,7 @@ def main():
     os.makedirs(MODS_DIR, exist_ok=True)
     os.makedirs(WORLD_DIR, exist_ok=True)
     os.makedirs(FILES_ROOT, exist_ok=True)
+    os.makedirs(LANG_DIR, exist_ok=True)
     ip = get_local_ip()
     zeroconf = Zeroconf()
     info = ServiceInfo(
