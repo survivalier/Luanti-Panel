@@ -19,7 +19,7 @@ import ssl
 from zeroconf import Zeroconf, ServiceInfo
 import socket
 import getpass
-PASSWORD = "change-moi-STP"
+PASSWORD = "Change-moi-STP"
 PANEL_VERSION = "3"
 HOST = "0.0.0.0"
 PORT = 8877
@@ -1196,7 +1196,10 @@ async function sendCmd(){
     await api('/api/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cmd})});
   });
 }
+const CONSOLE_DISPLAY_LIMIT = 100;
+let consoleLines = [];
 function clearConsole(){
+  consoleLines = [];
   document.getElementById('console').innerHTML = '';
 }
 let lastConsoleLen = 0;
@@ -1207,7 +1210,11 @@ async function pollConsole(){
     if(data.lines.length){
       const el = document.getElementById('console');
       const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
-      data.lines.forEach(l=>{ el.innerHTML += colorizeLine(l) + "\\n"; });
+      data.lines.forEach(l=>{ consoleLines.push(colorizeLine(l)); });
+      if(consoleLines.length > CONSOLE_DISPLAY_LIMIT){
+        consoleLines = consoleLines.slice(-CONSOLE_DISPLAY_LIMIT);
+      }
+      el.innerHTML = consoleLines.join("\\n") + "\\n";
       lastConsoleLen = data.total;
       if(atBottom) el.scrollTop = el.scrollHeight;
     }
