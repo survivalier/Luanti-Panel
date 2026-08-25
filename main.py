@@ -19,7 +19,7 @@ import ssl
 from zeroconf import Zeroconf, ServiceInfo
 import socket
 import getpass
-PASSWORD = "Change-moi-STP"
+PASSWORD = "change-moi-STP"
 PANEL_VERSION = "3.1"
 HOST = "0.0.0.0"
 PORT = 8877
