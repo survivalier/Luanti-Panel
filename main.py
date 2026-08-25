@@ -19,8 +19,8 @@ import ssl
 from zeroconf import Zeroconf, ServiceInfo
 import socket
 import getpass
-PASSWORD = "change-moi-STP"
-PANEL_VERSION = "3.1"
+PASSWORD = "change-me"
+PANEL_VERSION = "3.2"
 HOST = "0.0.0.0"
 PORT = 8877
 LUANTI_BIN = "luanti"
@@ -54,12 +54,12 @@ def reader_thread(proc):
         except Exception:
             line = repr(raw)
         console_push(line)
-    console_push("[panel] Le processus du serveur s'est arrêté.")
+    console_push("[panel] The server process has stopped.")
 def start_server():
     global server_process, server_start_time
     with server_lock:
         if server_process is not None and server_process.poll() is None:
-            return False, "Le serveur tourne déjà."
+            return False, "The server is already running."
         cmd = [LUANTI_BIN] + EXTRA_ARGS
         try:
             server_process = subprocess.Popen(
@@ -71,17 +71,17 @@ def start_server():
                 cwd=os.path.expanduser("~"),
             )
         except FileNotFoundError:
-            return False, f"Binaire introuvable : {LUANTI_BIN}"
+            return False, f"Binary not found : {LUANTI_BIN}"
         server_start_time = time.time()
         t = threading.Thread(target=reader_thread, args=(server_process,), daemon=True)
         t.start()
-        console_push(f"[panel] Serveur démarré (pid={server_process.pid}).")
-        return True, "Serveur démarré."
+        console_push(f"[panel] Server started (pid={server_process.pid}).")
+        return True, "Server started."
 def stop_server():
     global server_process
     with server_lock:
         if server_process is None or server_process.poll() is not None:
-            return False, "Le serveur n'est pas en cours d'exécution."
+            return False, "The server is not running."
         try:
             server_process.stdin.write(b"/shutdown\n")
             server_process.stdin.flush()
@@ -95,8 +95,8 @@ def stop_server():
                 server_process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 server_process.kill()
-        console_push("[panel] Serveur arrêté.")
-        return True, "Serveur arrêté."
+        console_push("[panel] Server stopped.")
+        return True, "Server stopped."
 def restart_server():
     with server_lock:
         running = server_process is not None and server_process.poll() is None
@@ -112,47 +112,47 @@ def server_status():
 def send_command(cmd_text):
     with server_lock:
         if server_process is None or server_process.poll() is not None:
-            return False, "Le serveur n'est pas en cours d'exécution."
+            return False, "Server is not running."
         try:
             server_process.stdin.write((cmd_text + "\n").encode("utf-8"))
             server_process.stdin.flush()
             console_push(f"> {cmd_text}")
-            return True, "Commande envoyée."
+            return True, "Order sent."
         except Exception as e:
             return False, str(e)
 def download_panel_update():
-    """Télécharge la dernière version du script du panel depuis GitHub."""
+    """Download the latest version of the panel script from GitHub."""
     req = Request(UPDATE_URL, headers={"User-Agent": "LuantiPanel-Updater"})
     try:
         with urlopen(req, timeout=30) as resp:
             data = resp.read()
     except HTTPError as e:
-        raise RuntimeError(f"Échec du téléchargement (HTTP {e.code}).")
+        raise RuntimeError(f"Download failed (HTTP {e.code}).")
     except URLError as e:
-        raise RuntimeError(f"Échec du téléchargement : {e.reason}")
+        raise RuntimeError(f"Download failed : {e.reason}")
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
-        raise RuntimeError("Le fichier téléchargé n'est pas un script texte valide.")
+        raise RuntimeError("The downloaded file is not a valid text script.")
     if "class Handler" not in text or "PASSWORD" not in text:
-        raise RuntimeError("Le fichier téléchargé ne ressemble pas à un script de panel valide.")
+        raise RuntimeError("The downloaded file does not look like a valid panel script.")
     return text
 def extract_panel_version(source_text):
-    """Extrait la valeur de PANEL_VERSION depuis le code source d'un script de panel."""
+    """Extracts the value of PANEL_VERSION from the source code of a panel script."""
     m = re.search(r'^PANEL_VERSION\s*=\s*"([^"]*)"\s*$', source_text, re.MULTILINE)
     if not m:
-        raise RuntimeError("Impossible de déterminer la version du fichier téléchargé.")
+        raise RuntimeError("Unable to determine the version of the downloaded file.")
     return m.group(1)
 def parse_version_tuple(v):
-    """Convertit une chaîne de version (ex: '1.2.3') en tuple d'entiers comparable.
-    Les segments non numériques sont ignorés."""
+    """Converts a version string (ex: '1.2.3') to a comparable integer tuple. 
+Non-numeric segments are ignored."""
     parts = []
     for chunk in re.split(r"[.\-+]", v or ""):
         m = re.match(r"\d+", chunk)
         parts.append(int(m.group(0)) if m else 0)
     return tuple(parts) if parts else (0,)
 def check_for_update():
-    """Compare la version locale du panel à celle disponible sur GitHub."""
+    """Compares the local version of the panel to the one available on GitHub."""
     source = download_panel_update()
     remote_version = extract_panel_version(source)
     local_t = parse_version_tuple(PANEL_VERSION)
@@ -164,14 +164,14 @@ def check_for_update():
         "update_available": remote_t > local_t,
     }
 def apply_new_password(source_text, new_password):
-    """Remplace la ligne PASSWORD = "..." du script téléchargé par le nouveau mot de passe choisi."""
+    """Replaces the PASSWORD line = "..." of the script downloaded by the new chosen password."""
     escaped = new_password.replace("\\", "\\\\").replace('"', '\\"')
     pattern = re.compile(r'^PASSWORD\s*=\s*".*"\s*$', re.MULTILINE)
     if not pattern.search(source_text):
-        raise ValueError("Impossible de localiser la ligne PASSWORD dans le nouveau fichier.")
+        raise ValueError("Unable to locate PASSWORD line in new file.")
     return pattern.sub(f'PASSWORD = "{escaped}"', source_text, count=1)
 def write_panel_source(new_source):
-    """Sauvegarde l'ancien script puis écrit la nouvelle version sur disque."""
+    """Save the old script then write the new version to disk."""
     backup_path = SCRIPT_PATH + ".bak"
     try:
         shutil.copy2(SCRIPT_PATH, backup_path)
@@ -182,33 +182,33 @@ def write_panel_source(new_source):
         f.write(new_source)
     os.replace(tmp_path, SCRIPT_PATH)
 def schedule_panel_restart(delay=0.6):
-    """Relance le processus du panel (re-exec) après un court délai, pour laisser
-    le temps à la réponse HTTP de mise à jour d'être envoyée au navigateur."""
+    """Restarts the panel process (re-exec) after a short delay, to let 
+time for the HTTP update response to be sent to the browser."""
     def _do_restart():
         time.sleep(delay)
-        console_push("[panel] Redémarrage du panel après mise à jour…")
+        console_push("[panel] Restarting the panel after updating…")
         os.execv(sys.executable, [sys.executable] + sys.argv)
     threading.Thread(target=_do_restart, daemon=True).start()
 def schedule_panel_shutdown(delay=0.5):
-    """Arrête complètement le process du panel après un court délai."""
+    """Completely stops the panel process after a short delay."""
     def _do_shutdown():
         time.sleep(delay)
-        console_push("[panel] Extinction du panel demandée.")
+        console_push("[panel] Panel extinction requested.")
         os._exit(0)
     threading.Thread(target=_do_shutdown, daemon=True).start()
 LANG_DIR = os.path.join(os.path.dirname(SCRIPT_PATH), "lang")
 def safe_lang_path(code):
-    """Empêche toute évasion du dossier LANG_DIR (path traversal) pour les fichiers de traduction."""
+    """Prevents escaping the LANG_DIR folder (path traversal) for translation files."""
     code = re.sub(r"[^a-zA-Z0-9_-]", "", code or "")
     if not code:
-        raise ValueError("Code de langue invalide.")
+        raise ValueError("Invalid language code.")
     full = os.path.normpath(os.path.join(LANG_DIR, code + ".json"))
     base = os.path.normpath(LANG_DIR)
     if not full.startswith(base + os.sep):
-        raise ValueError("Chemin invalide.")
+        raise ValueError("Invalid path.")
     return full
 def list_available_langs():
-    """Scanne LANG_DIR et retourne la liste des langues disponibles (addons de traduction)."""
+    """Scans LANG_DIR and returns the list of available languages ​​(translation addons)."""
     if not os.path.isdir(LANG_DIR):
         return []
     out = []
@@ -228,17 +228,17 @@ def list_available_langs():
         out.append({"code": code, "name": name, "flag": flag})
     return out
 def safe_mod_path(relfolder):
-    """Empêche toute évasion du dossier MODS_DIR (path traversal).
-    Accepte soit un mod autonome ("mymod"), soit un sous-mod d'un modpack
-    ("modpack/submod") — jamais plus d'un niveau d'imbrication."""
+    """Prevents any escape from the MODS_DIR folder (path traversal). 
+Accepts either a standalone mod ("mymod") or a submod of a modpack 
+("modpack/submod") — never more than one level of nesting."""
     relfolder = (relfolder or "").strip().strip("/")
     parts = [p for p in relfolder.split("/") if p]
     if not parts or len(parts) > 2 or any(p in (".", "..") for p in parts):
-        raise ValueError("Nom de mod invalide.")
+        raise ValueError("Invalid mod name.")
     full = os.path.normpath(os.path.join(MODS_DIR, *parts))
     base = os.path.normpath(MODS_DIR)
     if full != base and not full.startswith(base + os.sep):
-        raise ValueError("Chemin invalide.")
+        raise ValueError("Invalid path.")
     return full
 def world_mt_path():
     return os.path.join(WORLD_DIR, "world.mt")
@@ -254,11 +254,11 @@ def write_world_mt(lines):
     with open(world_mt_path(), "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
 def get_enabled_mods():
-    """Retourne {nom_technique_du_mod: bool activé}.
-    Dans world.mt, un mod est considéré activé dès que sa valeur n'est pas
-    "false" — pour un mod autonome la valeur est "true", mais pour un mod
-    faisant partie d'un modpack, Luanti stocke plutôt son chemin relatif,
-    ex: load_mod_nations_chat = mods/nationsmod/nations_chat
+    """Returns {mod_technical_name: bool enabled}. 
+In world.mt, a mod is considered activated as soon as its value is not 
+"false" — for a standalone mod the value is "true", but for a mod 
+being part of a modpack, Luanti stores its relative path instead, 
+ex: load_mod_nations_chat = mods/example
     """
     enabled = {}
     for line in read_world_mt():
@@ -268,9 +268,9 @@ def get_enabled_mods():
             enabled[m.group(1)] = val != "" and val.lower() != "false"
     return enabled
 def set_mod_enabled(modname, enabled, rel_path=None):
-    """Active/désactive un mod dans world.mt.
-    rel_path (ex: "mods/nationsmod/nations_chat") doit être fourni pour un
-    mod appartenant à un modpack ; sinon la valeur "true" est utilisée."""
+    """Enables/disables a mod in world.mt. 
+rel_path (ex: "mods/nationsmod/nations_chat") must be provided for a 
+mod belonging to a modpack; otherwise the value "true" is used."""
     lines = read_world_mt()
     key = f"load_mod_{modname}"
     new_value = (rel_path if rel_path else "true") if enabled else "false"
@@ -291,8 +291,8 @@ def is_modpack_dir(path):
 def is_mod_dir(path):
     return os.path.isfile(os.path.join(path, "init.lua")) or os.path.isfile(os.path.join(path, "mod.conf"))
 def mod_technical_name(path, fallback):
-    """Lit le nom déclaré dans mod.conf (name = ...) si présent, sinon
-    retombe sur le nom du dossier."""
+    """Reads the name declared in mod.conf (name = ...) if present, otherwise 
+falls back on the folder name."""
     conf = os.path.join(path, "mod.conf")
     if os.path.isfile(conf):
         try:
@@ -336,10 +336,10 @@ def list_mods():
             })
     return mods
 def toggle_modpack(modpack_name, enabled):
-    """Active ou désactive tous les mods d'un modpack en une seule fois."""
+    """Enables or disables all mods in a modpack at once."""
     full = safe_mod_path(modpack_name)
     if not os.path.isdir(full) or not is_modpack_dir(full):
-        raise ValueError("Modpack introuvable.")
+        raise ValueError("Modpack not found.")
     for sub in sorted(os.listdir(full)):
         subfull = os.path.join(full, sub)
         if not os.path.isdir(subfull) or not is_mod_dir(subfull):
@@ -348,10 +348,10 @@ def toggle_modpack(modpack_name, enabled):
         rel_path = f"mods/{modpack_name}/{sub}"
         set_mod_enabled(techname, enabled, rel_path if enabled else None)
 def delete_modpack(modpack_name):
-    """Supprime un modpack entier (dossier + toutes ses entrées world.mt)."""
+    """Deletes an entire modpack (folder + all its world.mt entries)."""
     full = safe_mod_path(modpack_name)
     if not os.path.isdir(full) or not is_modpack_dir(full):
-        raise ValueError("Modpack introuvable.")
+        raise ValueError("Modpack not found.")
     technames = []
     for sub in sorted(os.listdir(full)):
         subfull = os.path.join(full, sub)
@@ -394,7 +394,7 @@ def install_mod_from_git(url):
         capture_output=True, text=True, timeout=120
     )
     if proc.returncode != 0:
-        raise RuntimeError(proc.stderr.strip() or "Échec du clonage git.")
+        raise RuntimeError(proc.stderr.strip() or "Git clone failed.")
     return os.path.basename(dest)
 def install_mod_from_zip(filename, data):
     os.makedirs(MODS_DIR, exist_ok=True)
@@ -403,10 +403,10 @@ def install_mod_from_zip(filename, data):
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as z:
             for member in z.namelist():
-                # empêche l'évasion via zip malicieux
+                # prevents path traversal via a malicious zip archive
                 norm = os.path.normpath(member)
                 if norm.startswith("..") or os.path.isabs(norm):
-                    raise ValueError("Archive suspecte (chemin invalide).")
+                    raise ValueError("Suspicious archive (invalid path).")
             z.extractall(tmp_dir)
         entries = [e for e in os.listdir(tmp_dir) if not e.startswith(".")]
         if len(entries) == 1 and os.path.isdir(os.path.join(tmp_dir, entries[0])):
@@ -426,37 +426,37 @@ def install_mod_from_zip(filename, data):
             shutil.rmtree(tmp_dir, ignore_errors=True)
 CONFIG_FIELDS = [
     {"key": "port", "label": "Port", "type": "number", "default": "30000",
-     "desc": "Port réseau sur lequel le serveur écoute les connexions des joueurs."},
-    {"key": "server_name", "label": "Nom du serveur", "type": "text", "default": "Mon serveur Luanti",
-     "desc": "Nom affiché dans la liste des serveurs publics et en jeu."},
+     "desc": "Network port on which the server listens for player connections."},
+    {"key": "server_name", "label": "Server name", "type": "text", "default": "My Luanti server",
+     "desc": "Name shown in the public server list and in-game."},
     {"key": "server_description", "label": "Description", "type": "text", "default": "",
-     "desc": "Courte description affichée dans la liste des serveurs."},
-    {"key": "motd", "label": "Message du jour (MOTD)", "type": "text", "default": "",
-     "desc": "Message affiché aux joueurs à leur connexion."},
-    {"key": "max_users", "label": "Joueurs max", "type": "number", "default": "15",
-     "desc": "Nombre maximum de joueurs connectés simultanément."},
-    {"key": "default_privs", "label": "Privilèges par défaut", "type": "text", "default": "interact, shout",
-     "desc": "Privilèges accordés automatiquement à un nouveau joueur (ex: interact, shout, fly)."},
-    {"key": "creative_mode", "label": "Mode créatif", "type": "bool", "default": "false",
-     "desc": "Active l'inventaire créatif illimité pour tous les joueurs."},
-    {"key": "enable_damage", "label": "Dégâts activés", "type": "bool", "default": "true",
-     "desc": "Active les dégâts (chute, faim, mobs, etc.)."},
-    {"key": "enable_pvp", "label": "PvP activé", "type": "bool", "default": "false",
-     "desc": "Autorise les joueurs à se blesser entre eux."},
-    {"key": "disallow_empty_password", "label": "Interdire mot de passe vide", "type": "bool", "default": "true",
-     "desc": "Empêche la connexion avec un mot de passe de compte vide."},
-    {"key": "strict_protocol_version_checking", "label": "Vérification stricte du protocole", "type": "bool", "default": "false",
-     "desc": "Rejette les clients dont la version de protocole ne correspond pas exactement."},
-    {"key": "static_spawnpoint", "label": "Point d'apparition fixe", "type": "text", "default": "",
-     "desc": "Coordonnées fixes d'apparition, format x,y,z (vide = aléatoire)."},
-    {"key": "max_block_send_distance", "label": "Distance d'envoi des blocs", "type": "number", "default": "10",
-     "desc": "Distance (en mapblocks) de terrain envoyée aux joueurs. Impacte les perfs réseau."},
-    {"key": "active_block_range", "label": "Portée des blocs actifs", "type": "number", "default": "4",
-     "desc": "Distance dans laquelle les blocs sont simulés activement (mobs, cultures, etc.)."},
-    {"key": "time_speed", "label": "Vitesse du temps", "type": "number", "default": "72",
-     "desc": "Vitesse d'écoulement du cycle jour/nuit (72 = 1 jour réel = 20 min)."},
-    {"key": "kick_msg_crash", "label": "Message de kick en cas de crash", "type": "text", "default": "",
-     "desc": "Message affiché aux joueurs si le serveur plante et les déconnecte."},
+     "desc": "Short description shown in the server list."},
+    {"key": "motd", "label": "Message of the day (MOTD)", "type": "text", "default": "",
+     "desc": "Message shown to players when they connect."},
+    {"key": "max_users", "label": "Max players", "type": "number", "default": "15",
+     "desc": "Maximum number of players connected at the same time."},
+    {"key": "default_privs", "label": "Default privileges", "type": "text", "default": "interact, shout",
+     "desc": "Privileges automatically granted to a new player (e.g. interact, shout, fly)."},
+    {"key": "creative_mode", "label": "Creative mode", "type": "bool", "default": "false",
+     "desc": "Enables an unlimited creative inventory for all players."},
+    {"key": "enable_damage", "label": "Damage enabled", "type": "bool", "default": "true",
+     "desc": "Enables damage from falls, hunger, mobs, and more."},
+    {"key": "enable_pvp", "label": "PvP enabled", "type": "bool", "default": "false",
+     "desc": "Allows players to hurt one another."},
+    {"key": "disallow_empty_password", "label": "Disallow empty passwords", "type": "bool", "default": "true",
+     "desc": "Prevents accounts with empty passwords from connecting."},
+    {"key": "strict_protocol_version_checking", "label": "Strict protocol version checking", "type": "bool", "default": "false",
+     "desc": "Rejects clients whose protocol version does not match exactly."},
+    {"key": "static_spawnpoint", "label": "Fixed spawn point", "type": "text", "default": "",
+     "desc": "Fixed spawn coordinates, in x,y,z format (empty = random)."},
+    {"key": "max_block_send_distance", "label": "Block send distance", "type": "number", "default": "10",
+     "desc": "Terrain distance sent to players, in mapblocks. Affects network performance."},
+    {"key": "active_block_range", "label": "Active block range", "type": "number", "default": "4",
+     "desc": "Distance within which blocks are actively simulated (mobs, crops, and more)."},
+    {"key": "time_speed", "label": "Time speed", "type": "number", "default": "72",
+     "desc": "Day/night cycle speed (72 = one real day lasts 20 minutes)."},
+    {"key": "kick_msg_crash", "label": "Crash kick message", "type": "text", "default": "",
+     "desc": "Message shown to players if the server crashes and disconnects them."},
 
 ]
 def read_conf_raw():
@@ -479,7 +479,7 @@ def parse_conf(text):
             values[m.group(1)] = m.group(2).strip()
     return values
 def update_conf_keys(updates):
-    """Met à jour ou ajoute des clés dans minetest.conf sans toucher au reste du fichier."""
+    """Updates or adds keys in minetest.conf without touching the rest of the file."""
     raw = read_conf_raw()
     lines = raw.splitlines() if raw else []
     remaining = dict(updates)
@@ -566,18 +566,18 @@ def get_network_connections():
         except Exception as e:
             return {"port": port, "tool": "netstat", "connections": [], "error": str(e)}
     return {"port": port, "tool": None, "connections": [],
-            "error": "Aucun outil réseau trouvé. Installe-le avec : pkg install iproute2"}
+            "error": "No network tool found. Install it with: pkg install iproute2"}
 def safe_rel_path(rel):
     rel = (rel or "").strip().lstrip("/")
     full = os.path.normpath(os.path.join(FILES_ROOT, rel))
     base = os.path.normpath(FILES_ROOT)
     if full != base and not full.startswith(base + os.sep):
-        raise ValueError("Chemin invalide.")
+        raise ValueError("Invalid path.")
     return full
 def list_dir(rel):
     full = safe_rel_path(rel)
     if not os.path.isdir(full):
-        raise ValueError("Dossier introuvable.")
+        raise ValueError("Folder not found.")
     items = []
     for entry in sorted(os.listdir(full)):
         p = os.path.join(full, entry)
@@ -590,7 +590,7 @@ def list_dir(rel):
 def parse_multipart(body, content_type):
     m = re.search(r'boundary=(?:"([^"]+)"|([^;]+))', content_type)
     if not m:
-        raise ValueError("boundary manquant")
+        raise ValueError("missing boundary")
     boundary = (m.group(1) or m.group(2)).strip().encode()
     delim = b"--" + boundary
     parts = body.split(delim)
@@ -618,8 +618,8 @@ def parse_multipart(body, content_type):
             fields[field_name] = content.decode("utf-8", errors="replace")
     return fields, files
 LOGIN_PAGE = """<!DOCTYPE html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Luanti Panel — Connexion</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Luanti Panel — Login</title>
 <style>
 :root{--bg:#0d0f14;--panel:#171a22;--panel2:#1e222c;--accent:#5b8cff;--accent2:#4a7cff;--good:#3ecf8e;--bad:#ff6b6b;--muted:#8a8f98;--border:#262b36}
 *{box-sizing:border-box}
@@ -640,15 +640,15 @@ button.submit:hover{background:var(--accent)}
 <div class="box">
 <div class="logo"><svg width="26" height="26" viewBox="0 0 24 24" fill="#fff"><path d="M6.11 0L1.76 2.516v4.478L3.638 8.08L.073 10.137v6.97L12.013 24l11.773-6.96l.14-.083v-6.672l-3.323-1.92V6.148l-1.061-.613l-1.156.774v.775l-1.11-.64v-.948c-.002-.11-.053-.182-.138-.24l-4.166-2.404a.28.28 0 0 0-.28 0l-2.62 1.515v-2.08Zm0 .64l3.41 1.966v4.297L6.11 8.867L2.312 6.676V2.834Zm6.721 2.77l3.613 2.086l-4.382 2.531a.277.277 0 0 0 0 .48l3.27 1.891l-7.2 4.07l-7.227-4.171L4.19 8.398l.684.397v2.217l1.236.715l1.239-.715V8.795l2.722-1.572V5.008Zm3.89 2.569v.466l-3.56 2.059l-.406-.234zm2.84.208l.487.282v4.33l-.496.287l-.614-.354V6.605ZM17 6.926l1.387.8v3.327l1.166.674l1.05-.61V9.006l2.77 1.6v.49L19.548 13.3l-3.381-1.951v-.944a.28.28 0 0 0-.139-.246l-2.314-1.338ZM5.429 9.113l.681.397l.686-.397v1.576l-.686.397l-.681-.397Zm-4.8 1.662l7.362 4.252c.086.05.19.051.278.002l7.343-4.154v.473l-7.76 4.386v1.43l.864.498v1.11l3.297 1.902l6.925-4.08v-1.19l1.11-.64v-1.112q1.661-.96 3.324-1.916v1.024l-2.217 1.277v.557l-1.11.638v1.11l-1.107.64v2.28l-6.93 4.095l-3.599-2.08V20.17l-1.06-.611v-1.11c-.385-.225-.773-.445-1.159-.67v-2.215l-3.324-1.92v1.11l-1.107-.64v3.325l-1.131-.652Zm15.26 1.053c1.21.697 2.402 1.392 3.604 2.082v.533l-1.107.641v1.191l-6.375 3.758l-2.742-1.582v-1.11l-.86-.495v-.787zm7.483 1.57v3.24l-3.879 2.24v-1.577l1.11-.64v-1.108l1.107-.64v-.556zM3.421 14.604l2.217 1.28v1.577l-1.446-.834l-1.879 1.086v-2.64l1.108.64zm1.32 1.392l-.138.24l.119.069l.138-.24zm.36.207l-.14.24l.12.07l.139-.24zm-.909 1.065l1.446.834l1.11.638v1.11l1.106.642v.469l-5.027-2.904Z"></path></svg></div>
 <h1>Luanti Panel</h1>
-<p class="sub">Connexion au panneau d'administration</p>
+<p class="sub">Sign in to the administration panel</p>
 <div id="err"></div>
 <div class="field">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-  <input type="password" id="pw" placeholder="Mot de passe" autofocus>
+  <input type="password" id="pw" placeholder="Password" autofocus>
 </div>
 <button class="submit" onclick="login()">
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"></path></svg>
-  Connexion
+  Sign in
 </button>
 </div>
 <script>
@@ -656,12 +656,12 @@ document.getElementById('pw').addEventListener('keydown', e => { if(e.key==='Ent
 async function login(){
   const pw = document.getElementById('pw').value;
   const r = await fetch('/api/login', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({password: pw})});
-  if(r.ok){ location.href = '/'; } else { document.getElementById('err').textContent = '⚠ Mot de passe incorrect.'; }
+  if(r.ok){ location.href = '/'; } else { document.getElementById('err').textContent = '⚠ Incorrect password.'; }
 }
 </script>
 </body></html>"""
 DASHBOARD_PAGE = """<!DOCTYPE html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Luanti Panel</title>
 <style>
 :root{--bg:#0d0f14;--panel:#171a22;--panel2:#1e222c;--accent:#5b8cff;--accent2:#4a7cff;--good:#3ecf8e;--bad:#ff6b6b;--muted:#8a8f98;--border:#262b36}
@@ -840,14 +840,14 @@ input:checked + .slider:before{transform:translateX(18px)}
     <button class="icon-btn" onclick="license()" title="License">
       <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 21H6a3 3 0 0 1-3-3v-1h10v2a2 2 0 0 0 4 0V5a2 2 0 1 1 2 2h-2m2-4H8a3 3 0 0 0-3 3v11M9 7h4m-4 4h4"/></svg>
     </button>
-    <button class="icon-btn" onclick="openUpdateModal()" title="Mettre à jour le panel">
+    <button class="icon-btn" onclick="openUpdateModal()" title="Update panel">
       <span class="update-dot" id="updateDot"></span>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
     </button>
-    <button class="icon-btn" onclick="logout()" title="Déconnexion">
+    <button class="icon-btn" onclick="logout()" title="Sign out">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
     </button>
-    <button class="icon-btn" onclick="power()" title="Système">
+    <button class="icon-btn" onclick="power()" title="System">
       <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" fill-rule="evenodd"><path d="m12.593 23.258l-.011.002l-.071.035l-.02.004l-.014-.004l-.071-.035q-.016-.005-.024.005l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.017-.018m.265-.113l-.013.002l-.185.093l-.01.01l-.003.011l.018.43l.005.012l.008.007l.201.093q.019.005.029-.008l.004-.014l-.034-.614q-.005-.018-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.004-.011l.017-.43l-.003-.012l-.01-.01z"/><path fill="currentColor" d="M13.5 3a1.5 1.5 0 0 0-3 0v10a1.5 1.5 0 0 0 3 0zM7.854 5.75a1.5 1.5 0 1 0-1.661-2.5A10.49 10.49 0 0 0 1.5 12c0 5.799 4.701 10.5 10.5 10.5S22.5 17.799 22.5 12c0-3.654-1.867-6.87-4.693-8.75a1.5 1.5 0 0 0-1.66 2.5a7.5 7.5 0 1 1-8.292 0Z"/></g></svg>
     </button>
   </div>
@@ -855,7 +855,7 @@ input:checked + .slider:before{transform:translateX(18px)}
 <nav>
   <button class="active" onclick="showTab('server')">
     <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 16 16"><path fill="currentColor" d="M14 11a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1zM3 12a1 1 0 1 0 0 2a1 1 0 0 0 0-2m3 0a1 1 0 1 0 0 2a1 1 0 0 0 0-2m8-6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zM3 7a1 1 0 1 0 0 2a1 1 0 0 0 0-2m3 0a1 1 0 1 0 0 2a1 1 0 0 0 0-2m8-6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1zM3 2a1 1 0 1 0 0 2a1 1 0 0 0 0-2m3 0a1 1 0 1 0 0 2a1 1 0 0 0 0-2"/></svg>
-    Serveur
+    Server
   </button>
   <button onclick="showTab('mods')">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>
@@ -863,7 +863,7 @@ input:checked + .slider:before{transform:translateX(18px)}
   </button>
   <button onclick="showTab('files')">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-    Fichiers
+    Files
   </button>
   <button onclick="showTab('config')">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
@@ -875,25 +875,25 @@ input:checked + .slider:before{transform:translateX(18px)}
   </button>
   <button onclick="showTab('network')">
     <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M15 20a1 1 0 0 0-1-1h-1v-2h4a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h4v2h-1a1 1 0 0 0-1 1H2v2h7a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1h7v-2zm-8-5V5h10v10z"/></svg>
-    Réseau
+    Network
   </button>
 </nav>
 <main>
 <div class="tab active" id="tab-server">
   <div class="card">
-    <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>Contrôle du serveur</h3>
+    <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>Server control</h3>
     <div class="actions">
       <button class="btn" id="btnStart" onclick="startServer()">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-        Démarrer
+        Start
       </button>
       <button class="btn danger" id="btnStop" onclick="stopServer()">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="1"></rect></svg>
-        Arrêter
+        Stop
       </button>
       <button class="btn ghost" id="btnRestart" onclick="restartServer()">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-        Redémarrer
+        Restart
       </button>
     </div>
     <p class="muted" id="uptime" style="margin-top:12px;margin-bottom:0"></p>
@@ -902,36 +902,36 @@ input:checked + .slider:before{transform:translateX(18px)}
     <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>Console</h3>
     <div id="console"></div>
     <div class="row">
-      <input id="cmdInput" placeholder="Commande serveur (ex: /status)" onkeydown="if(event.key==='Enter')sendCmd()">
+      <input id="cmdInput" placeholder="Server command (e.g. /status)" onkeydown="if(event.key==='Enter')sendCmd()">
       <button class="btn" onclick="sendCmd()">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-        Envoyer
+        Send
       </button>
-      <button class="btn ghost" onclick="clearConsole()" title="Vider l'affichage de la console">
+      <button class="btn ghost" onclick="clearConsole()" title="Clear console output">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path></svg>
-        Vider
+        Clear
       </button>
     </div>
   </div>
 </div>
 <div class="tab" id="tab-mods">
   <div class="card">
-    <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>Installer un mod</h3>
+    <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>Install a mod</h3>
     <div class="row">
-      <input id="gitUrl" placeholder="URL du dépôt git (https://...)">
+      <input id="gitUrl" placeholder="Git repository URL (https://...)">
       <button class="btn" onclick="installGit()">
         <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5c.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34c-.46-1.16-1.11-1.47-1.11-1.47c-.91-.62.07-.6.07-.6c1 .07 1.53 1.03 1.53 1.03c.87 1.52 2.34 1.07 2.91.83c.09-.65.35-1.09.63-1.34c-2.22-.25-4.55-1.11-4.55-4.92c0-1.11.38-2 1.03-2.71c-.1-.25-.45-1.29.1-2.64c0 0 .84-.27 2.75 1.02c.79-.22 1.65-.33 2.5-.33s1.71.11 2.5.33c1.91-1.29 2.75-1.02 2.75-1.02c.55 1.35.2 2.39.1 2.64c.65.71 1.03 1.6 1.03 2.71c0 3.82-2.34 4.66-4.57 4.91c.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2"/></svg>
-        Cloner
+        Clone
       </button>
     </div>
     <div class="dropzone" id="dropzone" onclick="document.getElementById('zipInput').click()">
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16l-4-4-4 4"></path><path d="M12 12v9"></path><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"></path></svg>
-      Cliquer ou déposer un fichier .zip de mod ici
+      Click or drop a mod .zip file here
     </div>
     <input type="file" id="zipInput" accept=".zip" style="display:none" onchange="uploadZip(this.files[0])">
   </div>
   <div class="card">
-    <h3><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M21.93 7.67a1 1 0 0 0-.07-.17c-.02-.03-.04-.05-.06-.08c-.03-.04-.06-.09-.1-.13c-.03-.03-.06-.04-.08-.07c-.04-.03-.07-.06-.11-.09h-.01l-9.01-5a.99.99 0 0 0-.97 0l-9.01 5H2.5c-.04.02-.08.06-.11.09a.3.3 0 0 0-.08.07c-.04.04-.07.08-.1.13c-.02.03-.04.05-.06.08c-.03.05-.05.11-.07.17c0 .02-.02.05-.03.07c-.02.08-.04.17-.04.26v8c0 .36.2.7.51.87l9 5s.1.04.14.06c.03.01.06.03.09.03a1.1 1.1 0 0 0 .5 0c.03 0 .06-.02.09-.03c.05-.02.1-.03.14-.06l9-5c.32-.18.51-.51.51-.87V8c0-.09-.01-.18-.04-.26c0-.03-.02-.05-.03-.07ZM12 4.15l6.94 3.86l-2.44 1.36l-6.94-3.86zm-4.5 2.5l6.94 3.86L12 11.87L5.06 8.01zM20 15.42l-7 3.89V13.6l2.5-1.39v3.21l2-1.11V11.1L20 9.71z"/></svg>Mods installés</h3>
+    <h3><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M21.93 7.67a1 1 0 0 0-.07-.17c-.02-.03-.04-.05-.06-.08c-.03-.04-.06-.09-.1-.13c-.03-.03-.06-.04-.08-.07c-.04-.03-.07-.06-.11-.09h-.01l-9.01-5a.99.99 0 0 0-.97 0l-9.01 5H2.5c-.04.02-.08.06-.11.09a.3.3 0 0 0-.08.07c-.04.04-.07.08-.1.13c-.02-.03-.04-.05-.06-.08c-.03.05-.05.11-.07.17c0 .02-.02.05-.03.07c-.02.08-.04.17-.04.26v8c0 .36.2.7.51.87l9 5s.1.04.14.06c.03.01.06.03.09.03a1.1 1.1 0 0 0 .5 0c.03 0 .06-.02.09-.03c.05-.02.1-.03.14-.06l9-5c.32-.18.51-.51.51-.87V8c0-.09-.01-.18-.04-.26c0-.02-.02-.05-.03-.07ZM12 4.15l6.94 3.86l-2.44 1.36l-6.94-3.86zm-4.5 2.5l6.94 3.86L12 11.87L5.06 8.01zM20 15.42l-7 3.89V13.6l2.5-1.39v3.21l2-1.11V11.1L20 9.71z"/></svg>Installed mods</h3>
     <div id="modsList"></div>
   </div>
 </div>
@@ -942,7 +942,7 @@ input:checked + .slider:before{transform:translateX(18px)}
       <input type="file" id="fileUpload" onchange="uploadFile(this.files[0])" style="flex:1">
       <button class="btn ghost" onclick="mkdir()">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path><line x1="12" y1="11" x2="12" y2="17"></line><line x1="9" y1="14" x2="15" y2="14"></line></svg>
-        Dossier
+        Folder
       </button>
     </div>
     <div id="filesList" style="margin-top:10px"></div>
@@ -950,44 +950,44 @@ input:checked + .slider:before{transform:translateX(18px)}
 </div>
 <div class="tab" id="tab-config">
   <div class="card">
-    <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>Paramètres courants</h3>
-    <p class="muted" style="margin:-6px 0 16px">Ces réglages modifient <code>minetest.conf</code>. Un redémarrage du serveur est nécessaire pour qu'ils prennent effet.</p>
+    <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>Current settings</h3>
+    <p class="muted" style="margin:-6px 0 16px">These settings modify <code>minetest.conf</code>. The server must be restarted for them to take effect.</p>
     <div id="configFields"></div>
     <div class="row" style="margin-top:4px">
       <button class="btn" onclick="saveConfigFields()">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
-        Enregistrer
+        Save
       </button>
     </div>
   </div>
   <div class="card">
-    <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>Configuration avancée (minetest.conf brut)</h3>
-    <p class="muted" style="margin:-6px 0 14px">Tous les paramètres possibles de Luanti ne peuvent pas être listés individuellement (il en existe des centaines selon la version et les mods). Ce champ affiche le fichier <code>minetest.conf</code> tel quel : tu peux y ajouter, modifier ou supprimer n'importe quelle clé au format <code>nom_du_parametre = valeur</code>, une par ligne.</p>
+    <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>Advanced configuration (raw minetest.conf)</h3>
+    <p class="muted" style="margin:-6px 0 14px">Not all Luanti settings can be listed individually (there are hundreds depending on the version and mods). This field displays <code>minetest.conf</code> as-is: you can add, edit, or remove any key using the format <code>parameter_name = value</code>, one per line.</p>
     <textarea id="rawConfig" spellcheck="false" style="width:100%;height:260px;background:#0d0f14;border:1px solid var(--border);border-radius:8px;color:#eee;font-family:ui-monospace,monospace;font-size:12.5px;padding:10px;resize:vertical"></textarea>
     <div class="row">
       <button class="btn ghost" onclick="loadConfig()">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-        Recharger
+        Reload
       </button>
       <button class="btn" onclick="saveRawConfig()">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
-        Enregistrer le fichier brut
+        Save raw file
       </button>
     </div>
   </div>
 </div>
 <div class="tab" id="tab-debug">
   <div class="card">
-    <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="6" width="8" height="14" rx="4"></rect><path d="M19 7l-3 2"></path><path d="M5 7l3 2"></path><path d="M19 19l-3-2"></path><path d="M5 19l3-2"></path><line x1="12" y1="2" x2="12" y2="6"></line><line x1="3" y1="13" x2="8" y2="13"></line><line x1="16" y1="13" x2="21" y2="13"></line></svg>Journal de débogage</h3>
-    <p class="muted" style="margin:-6px 0 14px"><code>debug.txt</code> contient les logs internes du serveur. Chaque ligne commence en général par un niveau : <b style="color:var(--bad)">ERROR</b> (erreur bloquante, souvent un crash de mod), <b style="color:#f0c975">WARNING</b> (problème non bloquant), <b style="color:#7ee787">ACTION</b> (connexion/déconnexion, chat, placement de bloc), <b>INFO</b> (information générale), <b class="muted">VERBOSE / TRACE</b> (détails techniques). Utile pour diagnostiquer un mod qui plante ou un script Lua en erreur.</p>
+    <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="6" width="8" height="14" rx="4"></rect><path d="M19 7l-3 2"></path><path d="M5 7l3 2"></path><path d="M19 19l-3-2"></path><path d="M5 19l3-2"></path><line x1="12" y1="2" x2="12" y2="6"></line><line x1="3" y1="13" x2="8" y2="13"></line><line x1="16" y1="13" x2="21" y2="13"></line></svg>Debug log</h3>
+    <p class="muted" style="margin:-6px 0 14px"><code>debug.txt</code> contains the server's internal logs. Each line generally starts with a level: <b style="color:var(--bad)">ERROR</b> (blocking error, often a mod crash), <b style="color:#f0c975">WARNING</b> (non-blocking problem), <b style="color:#7ee787">ACTION</b> (connection/disconnection, chat, block placement), <b>INFO</b> (general information), <b class="muted">VERBOSE / TRACE</b> (technical details). Useful for diagnosing a crashing mod or a Lua script error.</p>
     <div class="row" style="margin-bottom:10px">
-      <input id="debugFilter" placeholder="Filtrer (ex: ERROR, nom du mod...)" oninput="renderDebug()" style="flex:1">
-      <button class="btn ghost" onclick="loadDebug()" title="Rafraîchir">
+      <input id="debugFilter" placeholder="Filter (e.g. ERROR, mod name...)" oninput="renderDebug()" style="flex:1">
+      <button class="btn ghost" onclick="loadDebug()" title="Refresh">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
       </button>
       <button class="btn danger" onclick="clearDebug()">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path></svg>
-        Vider
+        Clear
       </button>
     </div>
     <div id="debugConsole" style="background:#000;color:#d8dee9;font-family:ui-monospace,monospace;font-size:12px;padding:12px;height:420px;overflow-y:auto;border-radius:10px;white-space:pre-wrap;border:1px solid var(--border)"></div>
@@ -996,20 +996,20 @@ input:checked + .slider:before{transform:translateX(18px)}
 <div class="tab" id="tab-network">
   <div class="card">
     <h3 style="justify-content:space-between;display:flex">
-      <span style="display:flex;align-items:center;gap:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>Trafic réseau — port <span id="netPort">…</span></span>
-      <button class="icon-btn" onclick="loadNetwork()" title="Rafraîchir">
+      <span style="display:flex;align-items:center;gap:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>Network traffic — port <span id="netPort">…</span></span>
+      <button class="icon-btn" onclick="loadNetwork()" title="Refresh">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
       </button>
     </h3>
-    <p class="muted" style="margin:-6px 0 16px">Liste des connexions actives (joueurs et pairs) sur le port du serveur Luanti, lue depuis la table des sockets du système (<code>ss</code>/<code>netstat</code>) — mise à jour automatiquement toutes les 4 secondes tant que cet onglet est ouvert. Ceci montre qui est connecté et l'état des files d'attente réseau, pas le contenu des paquets : pour une inspection paquet par paquet il faudrait un outil de capture (ex. <code>tcpdump</code>), qui nécessite généralement les droits root sur Android et n'est pas fourni ici.</p>
+    <p class="muted" style="margin:-6px 0 16px">List of active connections (players and peers) on the Luanti server port, read from the system socket table (<code>ss</code>/<code>netstat</code>) — automatically refreshed every 4 seconds while this tab is open. This shows who is connected and the state of the network queues, not packet contents: packet-by-packet inspection would require a capture tool (e.g. <code>tcpdump</code>), which generally requires root privileges on Android and is not provided here.</p>
     <div class="net-summary">
-      <div class="net-stat"><div class="n" id="netPeerCount">0</div><div class="l">pairs connectés</div></div>
-      <div class="net-stat"><div class="n" id="netSocketCount">0</div><div class="l">sockets en écoute/actives</div></div>
+      <div class="net-stat"><div class="n" id="netPeerCount">0</div><div class="l">connected peers</div></div>
+      <div class="net-stat"><div class="n" id="netSocketCount">0</div><div class="l">listening/active sockets</div></div>
     </div>
     <div id="netError" class="muted" style="display:none;margin-bottom:10px;color:var(--bad)"></div>
     <div style="overflow-x:auto">
       <table class="net-table" id="netTable">
-        <thead><tr><th>Protocole</th><th>État</th><th>Adresse locale</th><th>Adresse distante</th><th>Recv-Q</th><th>Send-Q</th></tr></thead>
+        <thead><tr><th>Protocol</th><th>State</th><th>Local address</th><th>Remote address</th><th>Recv-Q</th><th>Send-Q</th></tr></thead>
         <tbody id="netTableBody"></tbody>
       </table>
     </div>
@@ -1024,22 +1024,22 @@ input:checked + .slider:before{transform:translateX(18px)}
 <div class="modal-overlay" id="updateModal">
   <div class="modal-box">
     <div id="updateFormView">
-      <h3><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Mettre à jour le panel</h3>
+      <h3><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Update panel</h3>
       <div class="version-check" id="versionCheck">
         <div class="vc-loading">
           <svg class="vc-spin" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3c4.97 0 9 4.03 9 9"></path></svg>
-          Vérification de la version sur GitHub…
+          Checking version on GitHub…
         </div>
       </div>
-      <p>Ceci va arrêter le serveur Luanti, télécharger la dernière version du panel depuis GitHub, puis redémarrer. La mise à jour remplace le fichier du panel, définis donc un nouveau mot de passe de connexion.</p>
-      <label for="updatePassword">Nouveau mot de passe du panel</label>
-      <input type="password" id="updatePassword" placeholder="Nouveau mot de passe">
+      <p>This will stop the Luanti server, download the latest panel version from GitHub, and restart it. The update replaces the panel file, so set a new login password.</p>
+      <label for="updatePassword">New panel password</label>
+      <input type="password" id="updatePassword" placeholder="New password">
       <div class="modal-error" id="updateError"></div>
       <div class="modal-actions">
-        <button class="btn ghost" id="updateCancelBtn" onclick="closeUpdateModal()">Annuler</button>
+        <button class="btn ghost" id="updateCancelBtn" onclick="closeUpdateModal()">Cancel</button>
         <button class="btn" id="updateConfirmBtn" onclick="confirmUpdate()">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-          Télécharger et mettre à jour
+          Download and update
         </button>
       </div>
     </div>
@@ -1048,37 +1048,34 @@ input:checked + .slider:before{transform:translateX(18px)}
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3c4.97 0 9 4.03 9 9"><animateTransform attributeName="transform" dur="1.5s" repeatCount="indefinite" type="rotate" values="0 12 12;360 12 12"/></path></svg>
         <svg class="upd-icon-lg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a1 1 0 0 1 1 1v10.586l2.293-2.293a1 1 0 0 1 1.414 1.414l-4 4a1 1 0 0 1-1.414 0l-4-4a1 1 0 1 1 1.414-1.414L11 13.586V3a1 1 0 0 1 1-1M5 17a1 1 0 0 1 1 1v2h12v-2a1 1 0 1 1 2 0v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a1 1 0 0 1 1-1"/></svg>
       </span>
-      <h4>Mise à jour en cours…</h4>
-      <p id="updateStep">Arrêt du serveur, téléchargement et installation de la mise à jour…</p>
+      <h4>Update in progress…</h4>
+      <p id="updateStep">Stopping the server, downloading and installing the update…</p>
     </div>
   </div>
 </div>
 <div class="modal-overlay" id="licenseModal" style="display:none">
   <div class="modal-box" style="max-width:800px;max-height:85vh;display:flex;flex-direction:column">
-    <h3><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 21H6a3 3 0 0 1-3-3v-1h10v2a2 2 0 0 0 4 0V5a2 2 0 1 1 2 2h-2m2-4H8a3 3 0 0 0-3 3v11M9 7h4m-4 4h4"/></svg>Licence</h3>
+    <h3><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 21H6a3 3 0 0 1-3-3v-1h10v2a2 2 0 0 0 4 0V5a2 2 0 1 1 2 2h-2m2-4H8a3 3 0 0 0-3 3v11M9 7h4m-4 4h4"/></svg>License</h3>
     <div id="licenseContent" style="overflow:auto;flex:1;background:#0d0f14;border:1px solid var(--border);border-radius:8px;padding:12px;white-space:pre-wrap"></div>
     <div class="modal-actions">
-      <button class="icon-btn" onclick="toggleLicenseLanguage()" title="Changer de langue">
-        <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 16 16"><g fill="currentColor"><path d="M4.545 6.714L4.11 8H3l1.862-5h1.284L8 8H6.833l-.435-1.286zm1.634-.736L5.5 3.956h-.049l-.679 2.022z"/><path d="M0 2a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v3h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-3H2a2 2 0 0 1-2-2zm2-1a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1zm7.138 9.995q.289.451.63.846c-.748.575-1.673 1.001-2.768 1.292c.178.217.451.635.555.867c1.125-.359 2.08-.844 2.886-1.494c.777.665 1.739 1.165 2.93 1.472c.133-.254.414-.673.629-.89c-1.125-.253-2.057-.694-2.82-1.284c.681-.747 1.222-1.651 1.621-2.757H14V8h-3v1.047h.765c-.318.844-.74 1.546-1.272 2.13a6 6 0 0 1-.415-.492a2 2 0 0 1-.94.31"/></g></svg>
-      </button>
-      <button class="btn ghost" onclick="closeLicense()">Fermer</button>
+      <button class="btn ghost" onclick="closeLicense()">Close</button>
     </div>
   </div>
 </div>
 <div class="modal-overlay" id="powerModal">
   <div class="modal-box">
-    <h3><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" fill-rule="evenodd"><path fill="currentColor" d="M13.5 3a1.5 1.5 0 0 0-3 0v10a1.5 1.5 0 0 0 3 0zM7.854 5.75a1.5 1.5 0 1 0-1.661-2.5A10.49 10.49 0 0 0 1.5 12c0 5.799 4.701 10.5 10.5 10.5S22.5 17.799 22.5 12c0-3.654-1.867-6.87-4.693-8.75a1.5 1.5 0 0 0-1.66 2.5a7.5 7.5 0 1 1-8.292 0Z"/></g></svg>Système</h3>
-    <p>Le serveur Luanti sera arrêté proprement avant l'action choisie.</p>
+    <h3><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" fill-rule="evenodd"><path fill="currentColor" d="M13.5 3a1.5 1.5 0 0 0-3 0v10a1.5 1.5 0 0 0 3 0zM7.854 5.75a1.5 1.5 0 1 0-1.661-2.5A10.49 10.49 0 0 0 1.5 12c0 5.799 4.701 10.5 10.5 10.5S22.5 17.799 22.5 12c0-3.654-1.867-6.87-4.693-8.75a1.5 1.5 0 0 0-1.66 2.5a7.5 7.5 0 1 1-8.292 0Z"/></g></svg>System</h3>
+    <p>The Luanti server will be shut down cleanly before the selected action.</p>
     <div class="modal-actions" style="justify-content:space-between">
-      <button class="btn ghost" id="powerCancelBtn" onclick="closePowerModal()">Annuler</button>
+      <button class="btn ghost" id="powerCancelBtn" onclick="closePowerModal()">Cancel</button>
       <div style="display:flex;gap:8px">
         <button class="btn ghost" onclick="confirmPanelRestart()">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-          Redémarrer le panel
+          Restart panel
         </button>
         <button class="btn danger" onclick="confirmPanelShutdown()">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
-          Éteindre le panel
+          Shut down panel
         </button>
       </div>
     </div>
@@ -1086,7 +1083,7 @@ input:checked + .slider:before{transform:translateX(18px)}
 </div>
 <div class="modal-overlay" id="alertModal">
   <div class="modal-box" style="max-width:380px">
-    <h3 id="alertModalTitle"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>Erreur</h3>
+    <h3 id="alertModalTitle"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>Error</h3>
     <p id="alertModalMessage" style="margin-bottom:0"></p>
     <div class="modal-actions">
       <button class="btn" onclick="closeAlertBox()">OK</button>
@@ -1157,8 +1154,8 @@ async function refreshStatus(){
   const r = await api('/api/status');
   const s = await r.json();
   document.getElementById('dot').classList.toggle('on', s.running);
-  document.getElementById('statusText').textContent = s.running ? `en ligne (pid ${s.pid})` : 'hors ligne';
-  document.getElementById('uptime').textContent = s.running ? `Uptime : ${Math.floor(s.uptime/60)} min` : '';
+  document.getElementById('statusText').textContent = s.running ? `online (pid ${s.pid})` : 'offline';
+  document.getElementById('uptime').textContent = s.running ? `Uptime: ${Math.floor(s.uptime/60)} min` : '';
   document.getElementById('btnStart').disabled = s.running;
   document.getElementById('btnStop').disabled = !s.running;
   document.getElementById('btnRestart').disabled = !s.running;
@@ -1179,20 +1176,20 @@ async function checkUpdateBadge(){
   }catch(e){}
 }
 async function startServer(){
-  await withAction('Démarrage du serveur…', async ()=>{ await api('/api/start',{method:'POST'}); refreshStatus(); });
+  await withAction('Starting server…', async ()=>{ await api('/api/start',{method:'POST'}); refreshStatus(); });
 }
 async function stopServer(){
-  await withAction('Arrêt du serveur…', async ()=>{ await api('/api/stop',{method:'POST'}); refreshStatus(); });
+  await withAction('Stopping server…', async ()=>{ await api('/api/stop',{method:'POST'}); refreshStatus(); });
 }
 async function restartServer(){
-  await withAction('Redémarrage du serveur…', async ()=>{ await api('/api/restart',{method:'POST'}); refreshStatus(); });
+  await withAction('Restarting server…', async ()=>{ await api('/api/restart',{method:'POST'}); refreshStatus(); });
 }
 async function sendCmd(){
   const inp = document.getElementById('cmdInput');
   if(!inp.value.trim()) return;
   const cmd = inp.value;
   inp.value='';
-  await withAction('Envoi de la commande…', async ()=>{
+  await withAction('Sending command…', async ()=>{
     await api('/api/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cmd})});
   });
 }
@@ -1228,10 +1225,10 @@ function renderModRow(m, indented){
   const div = document.createElement('div');
   div.className = 'mod-item' + (indented ? ' mod-item-indented' : '');
   div.innerHTML = `
-    <div class="item-left">${ICONS.package}<span class="mod-name">${m.name}</span><span class="size">${(m.size/1024).toFixed(1)} Ko</span></div>
+    <div class="item-left">${ICONS.package}<span class="mod-name">${m.name}</span><span class="size">${(m.size/1024).toFixed(1)} KB</span></div>
     <div class="actions">
       <label class="switch"><input type="checkbox" ${m.enabled?'checked':''}><span class="slider"></span></label>
-      <button class="icon-btn-sm" title="Supprimer">${ICONS.trash}</button>
+      <button class="icon-btn-sm" title="Delete">${ICONS.trash}</button>
     </div>`;
   div.querySelector('input[type=checkbox]').addEventListener('change', e => toggleMod(m.folder, m.name, e.target.checked));
   div.querySelector('.icon-btn-sm').addEventListener('click', () => deleteMod(m.folder, m.name));
@@ -1243,7 +1240,7 @@ async function loadMods(){
   const el = document.getElementById('modsList');
   el.innerHTML = '';
   if(!mods.length){
-    el.innerHTML = `<div class="empty">${ICONS.inbox}Aucun mod installé.</div>`;
+    el.innerHTML = `<div class="empty">${ICONS.inbox}No mods installed.</div>`;
     return;
   }
   const standalone = mods.filter(m => !m.modpack);
@@ -1263,8 +1260,8 @@ async function loadMods(){
       <div class="item-left">${ICONS.folder}<span class="mod-name">${pack}</span><span class="size">${items.length} mod${items.length>1?'s':''}</span></div>
       <div class="actions">
         <label class="switch"><input type="checkbox" class="modpack-switch" ${allEnabled?'checked':''}><span class="slider"></span></label>
-        <button class="icon-btn-sm modpack-delete" title="Supprimer le modpack">${ICONS.trash}</button>
-        <button class="icon-btn-sm modpack-toggle" title="${expanded?'Réduire':'Déployer'}">${expanded?ICONS.chevronUp:ICONS.chevronDown}</button>
+        <button class="icon-btn-sm modpack-delete" title="Delete modpack">${ICONS.trash}</button>
+        <button class="icon-btn-sm modpack-toggle" title="${expanded?'Collapse':'Expand'}">${expanded?ICONS.chevronUp:ICONS.chevronDown}</button>
       </div>`;
     const packSwitch = header.querySelector('.modpack-switch');
     packSwitch.indeterminate = !allEnabled && !allDisabled;
@@ -1278,7 +1275,7 @@ async function loadMods(){
       body.style.display = nowExpanded ? 'block' : 'none';
       modpackExpanded[pack] = nowExpanded;
       toggleBtn.innerHTML = nowExpanded ? ICONS.chevronUp : ICONS.chevronDown;
-      toggleBtn.title = nowExpanded ? 'Réduire' : 'Déployer';
+      toggleBtn.title = nowExpanded ? 'Collapse' : 'Expand';
     });
     packSwitch.addEventListener('change', e => toggleModpack(pack, e.target.checked));
     header.querySelector('.modpack-delete').addEventListener('click', () => deleteModpack(pack));
@@ -1288,26 +1285,26 @@ async function loadMods(){
   });
 }
 async function toggleModpack(pack, enabled){
-  await withAction((enabled?'Activation':'Désactivation')+' du modpack « '+pack+' »…', async ()=>{
+  await withAction((enabled?'Enabling':'Disabling')+' modpack « '+pack+' »…', async ()=>{
     await api('/api/mods/modpack/toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({modpack:pack,enabled})});
     loadMods();
   });
 }
 async function deleteModpack(pack){
-  if(!confirm('Supprimer tout le modpack "'+pack+'" et tous les mods qu\\'il contient ?')) return;
-  await withAction('Suppression du modpack « '+pack+' »…', async ()=>{
+  if(!confirm('Delete the entire modpack "'+pack+'" et tous les mods qu\\'il contient ?')) return;
+  await withAction('Deleting modpack « '+pack+' »…', async ()=>{
     await api('/api/mods/modpack/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({modpack:pack})});
     loadMods();
   });
 }
 async function toggleMod(folder, name, enabled){
-  await withAction('Mise à jour du mod « '+name+' »…', async ()=>{
+  await withAction('Updating mod "'+name+'"…', async ()=>{
     await api('/api/mods/toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({folder,name,enabled})});
   });
 }
 async function deleteMod(folder, name){
-  if(!confirm('Supprimer le mod "'+name+'" ?')) return;
-  await withAction('Suppression du mod « '+name+' »…', async ()=>{
+  if(!confirm('Delete mod "'+name+'"?')) return;
+  await withAction('Deleting mod « '+name+' »…', async ()=>{
     await api('/api/mods/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({folder,name})});
     loadMods();
   });
@@ -1315,21 +1312,21 @@ async function deleteMod(folder, name){
 async function installGit(){
   const url = document.getElementById('gitUrl').value.trim();
   if(!url) return;
-  await withAction('Clonage du dépôt git…', async ()=>{
+  await withAction('Cloning git repository…', async ()=>{
     const r = await api('/api/mods/git',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});
     const d = await r.json();
-    if(!r.ok) showAlertBox('Erreur : '+d.error);
+    if(!r.ok) showAlertBox('Error: '+d.error);
     document.getElementById('gitUrl').value='';
     loadMods();
   });
 }
 async function uploadZip(file){
   if(!file) return;
-  await withAction('Installation du mod (zip)…', async ()=>{
+  await withAction('Installing mod (zip)…', async ()=>{
     const fd = new FormData(); fd.append('file', file);
     const r = await api('/api/mods/upload',{method:'POST',body:fd});
     const d = await r.json();
-    if(!r.ok) showAlertBox('Erreur : '+d.error);
+    if(!r.ok) showAlertBox('Error: '+d.error);
     loadMods();
   });
 }
@@ -1347,7 +1344,7 @@ async function loadFiles(){
   parts.forEach(p=>{ acc += (acc?'/':'')+p; html += ' / <span onclick="goPath(\\''+acc+'\\')">'+p+'</span>'; });
   bc.innerHTML = html;
   const el = document.getElementById('filesList');
-  el.innerHTML = items.length ? '' : `<div class="empty">${ICONS.inbox}Dossier vide.</div>`;
+  el.innerHTML = items.length ? '' : `<div class="empty">${ICONS.inbox}Empty folder.</div>`;
   items.forEach(it=>{
     const div = document.createElement('div');
     div.className = 'file-item';
@@ -1355,23 +1352,23 @@ async function loadFiles(){
     const icon = it.is_dir ? ICONS.folder : ICONS.file;
     const clickAction = it.is_dir ? `goPath('${rel}')` : `downloadFile('${rel}')`;
     div.innerHTML = `
-      <div class="item-left clickable" onclick="${clickAction}">${icon}<span class="file-name">${it.name}</span>${it.is_dir?'':'<span class="size">'+(it.size/1024).toFixed(1)+' Ko</span>'}</div>
-      <button class="icon-btn-sm" onclick="deleteFile('${rel}')" title="Supprimer">${ICONS.trash}</button>`;
+      <div class="item-left clickable" onclick="${clickAction}">${icon}<span class="file-name">${it.name}</span>${it.is_dir?'':'<span class="size">'+(it.size/1024).toFixed(1)+' KB</span>'}</div>
+      <button class="icon-btn-sm" onclick="deleteFile('${rel}')" title="Delete">${ICONS.trash}</button>`;
     el.appendChild(div);
   });
 }
 function goPath(p){ currentPath = p; loadFiles(); }
 function downloadFile(rel){ window.open('/api/files/download?path='+encodeURIComponent(rel)); }
 async function deleteFile(rel){
-  if(!confirm('Supprimer "'+rel+'" ?')) return;
-  await withAction('Suppression…', async ()=>{
+  if(!confirm('Delete "'+rel+'" ?')) return;
+  await withAction('Deleting…', async ()=>{
     await api('/api/files/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:rel})});
     loadFiles();
   });
 }
 async function uploadFile(file){
   if(!file) return;
-  await withAction('Envoi du fichier…', async ()=>{
+  await withAction('Uploading file…', async ()=>{
     const fd = new FormData(); fd.append('file', file); fd.append('path', currentPath);
     await api('/api/files/upload',{method:'POST',body:fd});
     loadFiles();
@@ -1379,9 +1376,9 @@ async function uploadFile(file){
   });
 }
 async function mkdir(){
-  const name = prompt('Nom du nouveau dossier :');
+  const name = prompt('New folder name:');
   if(!name) return;
-  await withAction('Création du dossier…', async ()=>{
+  await withAction('Creating folder…', async ()=>{
     await api('/api/files/mkdir',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:(currentPath?currentPath+'/':'')+name})});
     loadFiles();
   });
@@ -1419,17 +1416,17 @@ async function saveConfigFields(){
   inputs.forEach(inp=>{
     fields[inp.dataset.key] = inp.dataset.type === 'bool' ? (inp.checked ? 'true' : 'false') : inp.value;
   });
-  await withAction('Enregistrement de la configuration…', async ()=>{
+  await withAction('Saving configuration…', async ()=>{
     const r = await api('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fields})});
     const d = await r.json();
-    if(r.ok){ loadConfig(); } else { showAlertBox('Erreur : '+d.error); }
+    if(r.ok){ loadConfig(); } else { showAlertBox('Error: '+d.error); }
   });
 }
 async function saveRawConfig(){
   const raw = document.getElementById('rawConfig').value;
-  await withAction('Enregistrement du fichier brut…', async ()=>{
+  await withAction('Saving raw file…', async ()=>{
     const r = await api('/api/config/raw',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({raw})});
-    if(r.ok){ loadConfig(); } else { const d = await r.json(); showAlertBox('Erreur : '+d.error); }
+    if(r.ok){ loadConfig(); } else { const d = await r.json(); showAlertBox('Error: '+d.error); }
   });
 }
 let debugLines = [];
@@ -1439,19 +1436,19 @@ async function loadDebug(){
   debugLines = d.lines;
   renderDebug();
   if(!d.exists){
-    document.getElementById('debugConsole').textContent = "debug.txt n'existe pas encore (le serveur n'a peut-être jamais été démarré).";
+    document.getElementById('debugConsole').textContent = "debug.txt does not exist yet (the server may never have been started).";
   }
 }
 function renderDebug(){
   const filter = document.getElementById('debugFilter').value.trim().toLowerCase();
   const el = document.getElementById('debugConsole');
   const filtered = filter ? debugLines.filter(l => l.toLowerCase().includes(filter)) : debugLines;
-  el.innerHTML = filtered.length ? filtered.map(colorizeLine).join('\\n') : '(rien à afficher)';
+  el.innerHTML = filtered.length ? filtered.map(colorizeLine).join('\\n') : '(nothing to display)';
   el.scrollTop = el.scrollHeight;
 }
 async function clearDebug(){
-  if(!confirm('Vider définitivement le fichier debug.txt ?')) return;
-  await withAction('Suppression du journal de débogage…', async ()=>{
+  if(!confirm('Permanently clear debug.txt?')) return;
+  await withAction('Clearing debug log…', async ()=>{
     await api('/api/debug/clear',{method:'POST'});
     loadDebug();
   });
@@ -1478,7 +1475,7 @@ async function loadNetwork(){
     if(!conns.length){
       table.style.display = 'none';
       empty.style.display = 'flex';
-      empty.innerHTML = `${ICONS.inbox}Aucune connexion active sur ce port pour le moment.`;
+      empty.innerHTML = `${ICONS.inbox}No active connections on this port right now.`;
       return;
     }
     table.style.display = '';
@@ -1510,24 +1507,24 @@ function openUpdateModal(){
 }
 async function checkUpdateVersion(){
   const el = document.getElementById('versionCheck');
-  el.innerHTML = `<div class="vc-loading"><svg class="vc-spin" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3c4.97 0 9 4.03 9 9"></path></svg>Vérification de la version sur GitHub…</div>`;
+  el.innerHTML = `<div class="vc-loading"><svg class="vc-spin" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3c4.97 0 9 4.03 9 9"></path></svg>Checking version on GitHub…</div>`;
   try{
     const r = await api('/api/panel/check_update');
     const d = await r.json();
     if(!r.ok){
-      el.innerHTML = `<div class="vc-status error">⚠ ${d.error || 'Impossible de vérifier la version.'}</div>`;
+      el.innerHTML = `<div class="vc-status error">⚠ ${d.error || 'Unable to check the version.'}</div>`;
       return;
     }
     document.getElementById('updateDot').style.display = d.update_available ? 'block' : 'none';
     const statusHtml = d.update_available
-      ? `<div class="vc-status available"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M5 19q-.425 0-.712-.288T4 18t.288-.712T5 17h1v-7q0-2.075 1.25-3.687T10.5 4.2v-.7q0-.625.438-1.062T12 2t1.063.438T13.5 3.5v.7q2 .5 3.25 2.113T18 10v7h1q.425 0 .713.288T20 18t-.288.713T19 19zm7 3q-.825 0-1.412-.587T10 20h4q0 .825-.587 1.413T12 22"/></svg>Nouvelle version disponible</div>`
-      : `<div class="vc-status uptodate"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="m9.55 15.15l8.475-8.475q.3-.3.7-.3t.7.3t.3.713t-.3.712l-9.175 9.2q-.3.3-.7.3t-.7-.3L4.55 13q-.3-.3-.288-.712t.313-.713t.713-.3t.712.3z"/></svg>Le panel est à jour</div>`;
+      ? `<div class="vc-status available"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M5 19q-.425 0-.712-.288T4 18t.288-.712T5 17h1v-7q0-2.075 1.25-3.687T10.5 4.2v-.7q0-.625.438-1.062T12 2t1.063.438T13.5 3.5v.7q2 .5 3.25 2.113T18 10v7h1q.425 0 .713.288T20 18t-.288.713T19 19zm7 3q-.825 0-1.412-.587T10 20h4q0 .825-.587 1.413T12 22"/></svg>New version available</div>`
+      : `<div class="vc-status uptodate"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="m9.55 15.15l8.475-8.475q.3-.3.7-.3t.7.3t.3.713t-.3.712l-9.175 9.2q-.3.3-.7.3t-.7-.3L4.55 13q-.3-.3-.288-.712t.313-.713t.713-.3t.712.3z"/></svg>The panel is up to date</div>`;
     el.innerHTML = `
-      <div class="vc-row"><span class="vc-label">Version actuelle</span><span class="vc-value">v${d.current_version}</span></div>
-      <div class="vc-row"><span class="vc-label">Version sur GitHub</span><span class="vc-value">v${d.remote_version}</span></div>
+      <div class="vc-row"><span class="vc-label">Current version</span><span class="vc-value">v${d.current_version}</span></div>
+      <div class="vc-row"><span class="vc-label">GitHub version</span><span class="vc-value">v${d.remote_version}</span></div>
       ${statusHtml}`;
   }catch(e){
-    el.innerHTML = `<div class="vc-status error"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M2.725 21q-.275 0-.5-.137t-.35-.363t-.137-.488t.137-.512l9.25-16q.15-.25.388-.375T12 3t.488.125t.387.375l9.25 16q.15.25.138.513t-.138.487t-.35.363t-.5.137zm9.988-3.287Q13 17.425 13 17t-.288-.712T12 16t-.712.288T11 17t.288.713T12 18t.713-.288m0-3Q13 14.425 13 14v-3q0-.425-.288-.712T12 10t-.712.288T11 11v3q0 .425.288.713T12 15t.713-.288"/></svg>Impossible de vérifier la version (problème réseau).</div>`;
+    el.innerHTML = `<div class="vc-status error"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M2.725 21q-.275 0-.5-.137t-.35-.363t-.137-.488t.137-.512l9.25-16q.15-.25.388-.375T12 3t.488.125t.387.375l9.25 16q.15.25.138.513t-.138.487t-.35.363t-.5.137zm9.988-3.287Q13 17.425 13 17t-.288-.712T12 16t-.712.288T11 17t.288.713T12 18t.713-.288m0-3Q13 14.425 13 14v-3q0-.425-.288-.712T12 10t-.712.288T11 11v3q0 .425.288.713T12 15t.713-.288"/></svg>Unable to check the version (network problem).</div>`;
   }
 }
 function closeUpdateModal(){
@@ -1559,25 +1556,25 @@ async function confirmUpdate(){
   errEl.style.display = 'none';
   errEl.textContent = '';
   if(!pw || pw.length < 4){
-    errEl.textContent = 'Le mot de passe doit contenir au moins 4 caractères.';
+    errEl.textContent = 'The password must contain at least 4 characters.';
     errEl.style.display = 'block';
     return;
   }
-  showUpdateProgressView('Arrêt du serveur, téléchargement et installation de la mise à jour…');
+  showUpdateProgressView('Stopping the server, downloading and installing the update…');
   try{
     const r = await api('/api/panel/update', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({password: pw})});
     let d = {};
     try{ d = await r.json(); }catch(e){}
     if(!r.ok){
       showUpdateFormView();
-      errEl.textContent = 'Erreur : ' + (d.error || 'inconnue');
+      errEl.textContent = 'Error: ' + (d.error || 'unknown');
       errEl.style.display = 'block';
       return;
     }
-    showUpdateProgressView('Mise à jour installée. Redémarrage du panel — tu vas être redirigé vers la connexion…');
+    showUpdateProgressView('Update installed. Restarting the panel — you will be redirected to the login page…');
     setTimeout(()=>{ location.href = '/login'; }, 4000);
   }catch(e){
-    showUpdateProgressView('Redémarrage du panel en cours — tu vas être redirigé vers la connexion…');
+    showUpdateProgressView('Panel restart in progress — you will be redirected to the login page…');
     setTimeout(()=>{ location.href = '/login'; }, 4000);
   }
 }
@@ -1609,19 +1606,14 @@ async function loadLicense() {
     </span>
   `;
   try {
-    const url = licenseLang === "fr" ? "/license/fr" : "/license";
-    const r = await fetch(url);
+    const r = await fetch("/license");
     content.textContent = await r.text();
   } catch {
-    content.textContent = "Impossible de charger la licence.";
+    content.textContent = "Unable to load the license.";
   }
 }
 async function license() {
   document.getElementById("licenseModal").style.display = "flex";
-  await loadLicense();
-}
-async function toggleLicenseLanguage() {
-  licenseLang = licenseLang === "fr" ? "en" : "fr";
   await loadLicense();
 }
 function closeLicense(){
@@ -1642,27 +1634,50 @@ document.getElementById('powerModal').addEventListener('click', e=>{
   if(e.target.id === 'powerModal') closePowerModal();
 });
 async function confirmPanelRestart(){
-  if(!confirm('Redémarrer le panel ? Le serveur Luanti sera arrêté puis le panel relancé.')) return;
+  if(!confirm('Restart the panel? The Luanti server will be stopped and the panel restarted.')) return;
   powerActionInProgress = true;
-  await withAction('Redémarrage du panel…', async ()=>{
+  await withAction('Restarting the panel…', async ()=>{
     try{ await api('/api/panel/restart_panel', {method:'POST'}); }catch(e){}
   });
   setTimeout(()=>{ location.href = '/login'; }, 2500);
 }
 async function confirmPanelShutdown(){
-  if(!confirm('Éteindre complètement le panel ? Tu devras relancer le script manuellement pour y accéder à nouveau.')) return;
+  if(!confirm('Shut down the panel completely? You will have to restart the script manually to access it again.')) return;
   powerActionInProgress = true;
-  await withAction('Extinction du panel…', async ()=>{
+  await withAction('Shutting down the panel…', async ()=>{
     try{ await api('/api/panel/shutdown', {method:'POST'}); }catch(e){}
   });
   document.getElementById('powerModal').style.display = 'none';
-  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#8a8f98;background:#0d0f14">Le panel a été éteint. Relance le script pour y accéder à nouveau.</div>';
+  document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#8a8f98;background:#0d0f14">The panel has been shut down. Restart the script to access it again.</div>';
 }
 function showAlertBox(message, title){
-  document.getElementById('alertModalTitle').innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>' + (title || 'Erreur');
+  document.getElementById('alertModalTitle').innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>' + (title || 'Error');
   document.getElementById('alertModalMessage').textContent = message;
   document.getElementById('alertModal').style.display = 'flex';
 }
+function translateStaticHtml(){
+  const translations = {
+    'License':'License', 'System':'System', 'Error':'Error', 'Cancel':'Cancel',
+    'Update panel':'Update panel', 'Checking version on GitHub…':'Checking version on GitHub…',
+    'New panel password':'New panel password', 'New password':'New password',
+    'Download and update':'Download and update', 'Server command (e.g. /status)':'Server command (e.g. /status)',
+    'Filter (e.g. ERROR, mod name...)':'Filter (e.g. ERROR, mod name...)', 'Refresh':'Refresh',
+    'Current settings':'Current settings', 'Advanced configuration (raw minetest.conf)':'Advanced configuration (raw minetest.conf)',
+    'Debug log':'Debug log', 'Network traffic':'Network traffic', 'connected peers':'connected peers',
+    'listening/active sockets':'listening/active sockets', 'Protocol':'Protocol', 'State':'State',
+    'Local address':'Local address', 'Remote address':'Remote address'
+  };
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  let node;
+  while ((node = walker.nextNode())) nodes.push(node);
+  nodes.forEach(n => { if (translations[n.nodeValue.trim()]) n.nodeValue = n.nodeValue.replace(n.nodeValue.trim(), translations[n.nodeValue.trim()]); });
+  document.querySelectorAll('[placeholder],[title]').forEach(el => ['placeholder','title'].forEach(attr => {
+    const value = el.getAttribute(attr);
+    if (translations[value]) el.setAttribute(attr, translations[value]);
+  }));
+}
+translateStaticHtml();
 function closeAlertBox(){
   document.getElementById('alertModal').style.display = 'none';
 }
@@ -1685,16 +1700,24 @@ I18N_JS = r"""
   }
   function apply(root){
     root = root || document.body;
-    if (!currentLang()) return;
+    const activeLang = currentLang();
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     const nodes = [];
     let n;
     while ((n = walker.nextNode())) nodes.push(n);
     for (const node of nodes){
-      const raw = node.nodeValue;
-      const trimmed = raw.trim();
-      if (trimmed && dict[trimmed]) {
-        node.nodeValue = raw.replace(trimmed, dict[trimmed]);
+      if (!node.datasetOriginalText) {
+        const raw = node.nodeValue;
+        const trimmed = raw.trim();
+        if (!trimmed) continue;
+        node.datasetOriginalText = trimmed;
+        node.datasetFullRaw = raw;
+      }
+      const original = node.datasetOriginalText;
+      if (!activeLang) {
+        node.nodeValue = node.datasetFullRaw;
+      } else if (dict[original]) {
+        node.nodeValue = node.datasetFullRaw.replace(original, dict[original]);
       }
     }
     const els = (
@@ -1708,9 +1731,17 @@ I18N_JS = r"""
         : [];
     els.forEach(el=>{
       ["placeholder","title","aria-label"].forEach(attr=>{
-        const v = el.getAttribute && el.getAttribute(attr);
-        if (v && dict[v]) {
-          el.setAttribute(attr, dict[v]);
+        const origAttrKey = attr + "-original";
+        if (!el.hasAttribute(origAttrKey)) {
+          const val = el.getAttribute(attr);
+          if (val) el.setAttribute(origAttrKey, val);
+        }
+        const originalVal = el.getAttribute(origAttrKey);
+        if (!originalVal) return;
+        if (!activeLang) {
+          el.setAttribute(attr, originalVal);
+        } else if (dict[originalVal]) {
+          el.setAttribute(attr, dict[originalVal]);
         }
       });
     });
@@ -1718,6 +1749,7 @@ I18N_JS = r"""
   async function load(code){
     if (!code) {
       dict = {};
+      apply(document.body);
       return;
     }
     try {
@@ -1730,35 +1762,98 @@ I18N_JS = r"""
   }
   function buildSwitcher(langs){
     if (document.getElementById("i18n-switcher")) return;
-    const sel = document.createElement("select");
-    sel.id = "i18n-switcher";
-    sel.style.cssText =
-      "position:fixed;bottom:12px;left:12px;z-index:9999;" +
-      "background:#161616;color:#eee;border:1px solid #333;" +
-      "border-radius:6px;padding:5px 8px;font-size:12px;" +
-      "font-family:inherit;cursor:pointer";
-    const optNone = document.createElement("option");
-    optNone.value = "";
-    optNone.textContent = "— Langue —";
-    sel.appendChild(optNone);
-    langs.forEach(l=>{
-      const o = document.createElement("option");
-      o.value = l.code;
-      o.textContent = (l.flag ? l.flag + " " : "") + l.name;
-      sel.appendChild(o);
-    });
-    sel.value = currentLang() || "";
-    sel.addEventListener("change", ()=>{
-      const code = sel.value;
-      if (!code) {
-        localStorage.removeItem(KEY);
-        dict = {};
-        return;
+    const wrap = document.createElement("div");
+    wrap.id = "i18n-switcher";
+    wrap.style.cssText =
+      "position:fixed;bottom:16px;left:16px;z-index:9999;" +
+      "font-family:-apple-system,system-ui,'Segoe UI',sans-serif;";
+    const btn = document.createElement("button");
+    btn.id = "i18n-btn";
+    btn.type = "button";
+    btn.title = "Change language";
+    btn.style.cssText =
+      "background:#1e222c;border:1px solid #262b36;color:#8a8f98;" +
+      "width:34px;height:34px;border-radius:8px;cursor:pointer;" +
+      "display:flex;align-items:center;justify-content:center;" +
+      "box-shadow:0 8px 20px rgba(0,0,0,.35);transition:color .15s,border-color .15s;";
+    btn.innerHTML =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="m15.075 18.95l-.85 2.425q-.1.275-.35.45t-.55.175q-.5 0-.812-.413t-.113-.912l3.8-10.05q.125-.275.375-.45t.55-.175h.75q.3 0 .55.175t.375.45L22.6 20.7q.2.475-.1.888t-.8.412q-.325 0-.562-.175t-.363-.475l-.85-2.4zM9.05 13.975L4.7 18.3q-.275.275-.687.288T3.3 18.3q-.275-.275-.275-.7t.275-.7l4.35-4.35q-.875-.875-1.588-2T4.75 8h2.1q.5.975 1 1.7t1.2 1.45q.825-.825 1.713-2.313T12.1 6H2q-.425 0-.712-.288T1 5t.288-.712T2 4h6V3q0-.425.288-.712T9 2t.713.288T10 3v1h6q.425 0 .713.288T17 5t-.288.713T16 6h-1.9q-.525 1.8-1.575 3.7t-2.075 2.9l2.4 2.45l-.75 2.05zM15.7 17.2h3.6l-1.8-5.1z"/></svg>';
+    btn.addEventListener("mouseenter", ()=>{ btn.style.color = "#eee"; btn.style.borderColor = "#5b8cff"; });
+    btn.addEventListener("mouseleave", ()=>{ btn.style.color = "#8a8f98"; btn.style.borderColor = "#262b36"; });
+    const panel = document.createElement("div");
+    panel.id = "i18n-panel";
+    panel.style.cssText =
+      "position:absolute;bottom:42px;left:0;min-width:180px;max-height:280px;" +
+      "overflow-y:auto;background:#171a22;border:1px solid #262b36;" +
+      "border-radius:12px;padding:6px;box-shadow:0 12px 32px rgba(0,0,0,.45);" +
+      "display:none;flex-direction:column;gap:2px;";
+    function makeOption(code, label, flag){
+      const opt = document.createElement("button");
+      opt.type = "button";
+      opt.dataset.code = code;
+      opt.style.cssText =
+        "display:flex;align-items:center;gap:10px;width:100%;text-align:left;" +
+        "background:none;border:0;color:#e6e6e6;padding:9px 10px;border-radius:8px;" +
+        "cursor:pointer;font-size:13.5px;font-weight:500;transition:background .12s;";
+      const flagSpan = document.createElement("span");
+      flagSpan.style.cssText =
+        "display:flex;align-items:center;justify-content:center;width:22px;" +
+        "flex-shrink:0;line-height:1;border-radius:2px;overflow:hidden;";
+      if (flag && flag.trim().startsWith("<svg")) {
+        flagSpan.innerHTML = flag;
+      } else if (flag) {
+        flagSpan.style.fontSize = "16px";
+        flagSpan.textContent = flag;
+      } else {
+        flagSpan.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="m15.075 18.95l-.85 2.425q-.1.275-.35.45t-.55.175q-.5 0-.812-.413t-.113-.912l3.8-10.05q.125-.275.375-.45t.55-.175h.75q.3 0 .55.175t.375.45L22.6 20.7q.2.475-.1.888t-.8.412q-.325 0-.562-.175t-.363-.475l-.85-2.4zM9.05 13.975L4.7 18.3q-.275.275-.687.288T3.3 18.3q-.275-.275-.275-.7t.275-.7l4.35-4.35q-.875-.875-1.588-2T4.75 8h2.1q.5.975 1 1.7t1.2 1.45q.825-.825 1.713-2.313T12.1 6H2q-.425 0-.712-.288T1 5t.288-.712T2 4h6V3q0-.425.288-.712T9 2t.713.288T10 3v1h6q.425 0 .713.288T17 5t-.288.713T16 6h-1.9q-.525 1.8-1.575 3.7t-2.075 2.9l2.4 2.45l-.75 2.05zM15.7 17.2h3.6l-1.8-5.1z"/></svg>';
       }
-      localStorage.setItem(KEY, code);
-      load(code);
+      const labelSpan = document.createElement("span");
+      labelSpan.textContent = label;
+      opt.appendChild(flagSpan);
+      opt.appendChild(labelSpan);
+      opt.addEventListener("mouseenter", ()=>{ if(opt.dataset.code !== (currentLang()||"")) opt.style.background = "#1e222c"; });
+      opt.addEventListener("mouseleave", ()=>{ if(opt.dataset.code !== (currentLang()||"")) opt.style.background = "none"; });
+      return opt;
+    }
+    langs.forEach(l=>{
+      const opt = makeOption(l.code, l.name, l.flag);
+      opt.addEventListener("click", ()=>{
+        localStorage.setItem(KEY, l.code);
+        load(l.code);
+        closePanel();
+        updateActiveOption();
+      });
+      panel.appendChild(opt);
     });
-    document.body.appendChild(sel);
+    function updateActiveOption(){
+      const active = currentLang() || "";
+      panel.querySelectorAll("button[data-code]").forEach(o=>{
+        const isActive = o.dataset.code === active;
+        o.style.background = isActive ? "#1e2b45" : "none";
+        o.style.color = isActive ? "#7aa2ff" : "#e6e6e6";
+      });
+    }
+    let panelOpen = false;
+    function openPanel(){
+      panel.style.display = "flex";
+      panelOpen = true;
+      updateActiveOption();
+    }
+    function closePanel(){
+      panel.style.display = "none";
+      panelOpen = false;
+    }
+    btn.addEventListener("click", (e)=>{
+      e.stopPropagation();
+      panelOpen ? closePanel() : openPanel();
+    });
+    document.addEventListener("click", (e)=>{
+      if (panelOpen && !wrap.contains(e.target)) closePanel();
+    });
+    wrap.appendChild(panel);
+    wrap.appendChild(btn);
+    document.body.appendChild(wrap);
+    updateActiveOption();
   }
   document.addEventListener("DOMContentLoaded", async ()=>{
     const lang = currentLang();
@@ -1774,7 +1869,6 @@ I18N_JS = r"""
     } catch(e){}
   });
   new MutationObserver(muts=>{
-    if (!currentLang()) return;
     for (const m of muts) {
       for (const node of m.addedNodes) {
         if (node.nodeType === 1) {
@@ -1791,6 +1885,7 @@ I18N_JS = r"""
       if (!c) {
         localStorage.removeItem(KEY);
         dict = {};
+        apply(document.body);
         return;
       }
       localStorage.setItem(KEY, c);
@@ -1886,7 +1981,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 full = safe_rel_path(qs.get("path", [""])[0])
                 if not os.path.isfile(full):
-                    raise ValueError("Fichier introuvable.")
+                    raise ValueError("File not found.")
                 with open(full, "rb") as f:
                     data = f.read()
                 self.send_response(200)
@@ -1930,7 +2025,7 @@ class Handler(BaseHTTPRequestHandler):
                 code = path[len("/lang/"):-len(".json")]
                 full = safe_lang_path(code)
                 if not os.path.isfile(full):
-                    raise ValueError("Langue introuvable.")
+                    raise ValueError("Language not found.")
                 with open(full, encoding="utf-8") as f:
                     data = f.read()
                 body = data.encode("utf-8")
@@ -1964,33 +2059,6 @@ class Handler(BaseHTTPRequestHandler):
         LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
         OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
         SOFTWARE."""
-            body = license_text.encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-        elif path == "/license/fr":
-            license_text = """License MIT
-            
-            Copyright (c) 2026 Survivalier
-            
-            L'autorisation est accordée, gracieusement à toute personne obtenant une copie de ce logiciel
-            et des fichiers de documentation associés (le "Logiciel"), de commercialiser le Logiciel sans
-            restriction, y compris sans limitation les droits d'utiliser, de copier, de modifier, de fusionner, de
-            publier, de distribuer, de sous-licensier et/ou de vendre des copies du Logiciel, ainsi que
-            d'autoriser les personnes auxquelles le Logiciel est fourni à le faire, sous réserve des conditions suivantes:
-            
-            La mention de copyright ci-dessus et la présente permission doivent être incluses dans toutes
-            copies ou parties substantielles du Logiciel.
-            
-            LE LOGICIEL EST FOURNI "TEL QUEL", SANS GARANTIE D'AUCUNE SORTE, EXPRESSE OU
-            IMPLICITE, Y COMPRIS MAIS NON LIMITÉ AUX GARANTIES DE QUALITÉ MARCHANDE,
-            D'ADÉQUATION À UN USAGE PARTICULIER ET D'NON-CONTREFAÇON. EN AUCUN CAS, LES
-            AUTEURS OU TITULAIRES DU DROIT D'AUTEUR NE SERONT RESPONSABLES DE TOUTE
-            RÉCLAMATION, DOMMAGE OU AUTRE RESPONSABILITÉ, QUE CE SOIT DANS LE CADRE D'UN CONTRAT,
-            D'UN DÉLIT OU AUTRE, EN PROVENANCE, DÉCOULANT OU EN RELATION AVEC LE LOGICIEL OU SON UTILISATION, OU
-            D'AUTRES DEALINGS LIÉS AU LOGICIEL."""
             body = license_text.encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
@@ -2081,7 +2149,7 @@ class Handler(BaseHTTPRequestHandler):
                 body = self._read_body()
                 fields, files = parse_multipart(body, ct)
                 if "file" not in files:
-                    raise ValueError("Aucun fichier reçu.")
+                    raise ValueError("No file received.")
                 filename, content = files["file"]
                 name = install_mod_from_zip(filename, content)
                 self._send_json({"ok": True, "name": name})
@@ -2093,7 +2161,7 @@ class Handler(BaseHTTPRequestHandler):
                 body = self._read_body()
                 fields, files = parse_multipart(body, ct)
                 if "file" not in files:
-                    raise ValueError("Aucun fichier reçu.")
+                    raise ValueError("No file received.")
                 filename, content = files["file"]
                 target_dir = safe_rel_path(fields.get("path", ""))
                 os.makedirs(target_dir, exist_ok=True)
@@ -2147,7 +2215,7 @@ class Handler(BaseHTTPRequestHandler):
             data = self._get_json()
             new_password = data.get("password", "")
             if not isinstance(new_password, str) or len(new_password) < 4:
-                self._send_json({"error": "Mot de passe invalide (4 caractères minimum)."}, 400)
+                self._send_json({"error": "Invalid password (4 characters minimum)."}, 400)
                 return
             try:
                 stop_server()
@@ -2212,7 +2280,7 @@ def generate_certificate():
             regenerate = True
     if not regenerate:
         return
-    print("Génération d'un nouveau certificat HTTPS...")
+    print("Generating a new HTTPS certificate...")
     for f in (CERT_FILE, KEY_FILE):
         try:
             if os.path.isfile(f):
@@ -2238,21 +2306,21 @@ def generate_certificate():
         check=True
     )
     if not os.path.isfile(CERT_FILE):
-        raise FileNotFoundError(f"Certificat introuvable : {CERT_FILE}")
+        raise FileNotFoundError(f"Certificate not found: {CERT_FILE}")
     if not os.path.isfile(KEY_FILE):
-        raise FileNotFoundError(f"Clé privée introuvable : {KEY_FILE}")
-    print("Nouveau certificat HTTPS généré.")
-    print(f"  Certificat : {CERT_FILE}")
-    print(f"  Clé privée : {KEY_FILE}")
+        raise FileNotFoundError(f"Private key not found: {KEY_FILE}")
+    print("New HTTPS certificate generated.")
+    print(f"  Certificate: {CERT_FILE}")
+    print(f"  Private key: {KEY_FILE}")
 def setup_password():
     while True:
-        password = getpass.getpass("Définir un mot-de-passe pour Luanti Panel : ")
+        password = getpass.getpass("Set a password for Luanti Panel:  ")
         if len(password) < 4:
-            print("Le mot de passe doit contenir au moins 4 caractères.")
+            print("The password must contain at least 4 characters.")
             continue
-        confirm = getpass.getpass("Confirmer le mot de passe : ")
+        confirm = getpass.getpass("Confirm password:  ")
         if password != confirm:
-            print("Les mots de passe ne correspondent pas.\n")
+            print("Passwords do not match.\n")
             continue
         break
     with open(__file__, "r", encoding="utf-8") as f:
@@ -2265,12 +2333,12 @@ def setup_password():
     )
     with open(__file__, "w", encoding="utf-8") as f:
         f.write(source)
-    print("\nMot de passe enregistré.")
-    print("Redémarrage de Luanti Panel...\n")
+    print("\nPassword saved.")
+    print("Restarting Luanti Panel...\n")
     os.execv(sys.executable, [sys.executable] + sys.argv)
 def main():
     generate_certificate()
-    if PASSWORD == "change-moi-STP":
+    if PASSWORD == "change-me":
       setup_password()
     os.makedirs(MODS_DIR, exist_ok=True)
     os.makedirs(WORLD_DIR, exist_ok=True)
@@ -2292,7 +2360,7 @@ def main():
     try:
         zeroconf.register_service(info)
     except Exception as e:
-        print(f"Impossible de publier le service mDNS : {e}")
+        print(f"Unable to publish the mDNS service: {e}")
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(
@@ -2303,12 +2371,12 @@ def main():
         httpd.socket,
         server_side=True
     )
-    print(f"Luanti Panel en écoute sur :")
+    print(f"Luanti Panel listening on:")
     print(f"  https://luantipanel.local:{PORT}")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\nArrêt du panneau.")
+        print("\nPanel stopped.")
     finally:
         try:
             zeroconf.unregister_service(info)
