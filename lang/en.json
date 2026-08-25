@@ -1,7 +1,7 @@
 {
   "_meta": {
     "name": "English",
-    "flag": "🇬🇧"
+    "flag": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1.34em\" height=\"1em\" viewBox=\"0 0 640 480\"><path fill=\"#012169\" d=\"M0 0h640v480H0z\"/><path fill=\"#fff\" d=\"m75 0l244 181L562 0h78v62L400 241l240 178v61h-80L320 301L81 480H0v-60l239-178L0 64V0z\"/><path fill=\"#c8102e\" d=\"m424 281l216 159v40L369 281zm-184 20l6 35L54 480H0zM640 0v3L391 191l2-44L590 0zM0 0l239 176h-60L0 42z\"/><path fill=\"#fff\" d=\"M241 0v480h160V0zM0 160v160h640V160z\"/><path fill=\"#c8102e\" d=\"M0 193v96h640v-96zM273 0v480h96V0z\"/></svg>"
   },
   "Luanti Panel": "Luanti Panel",
   "Connexion au panneau d'administration": "Log in to the admin panel",
@@ -133,7 +133,7 @@
   "Point d'apparition fixe": "Fixed spawn point",
   "Coordonnées fixes d'apparition, format x,y,z (vide = aléatoire).": "Fixed spawn coordinates, format x,y,z (empty = random).",
   "Distance d'envoi des blocs": "Block send distance",
-  "Distance (en mapblocks) de terrain envoyée aux joueurs. Impacte les perfs réseau.": "Distance (in mapblocks) of terrain sent to players. Affects network performance.",
+  "Distance (en mapblocks) de terrain envoyée aux joueurs. Impacte les perfs réseau.": "Distance (in mapblocks) of terrain sent to players. affects network performance.",
   "Portée des blocs actifs": "Active block range",
   "Distance dans laquelle les blocs sont simulés activement (mobs, cultures, etc.).": "Distance within which blocks are actively simulated (mobs, crops, etc.).",
   "Vitesse du temps": "Time speed",
