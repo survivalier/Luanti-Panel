@@ -1,7 +1,7 @@
 {
-  "_meta": {
-    "name": "Español",
-    "flag": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1.34em\" height=\"1em\" viewBox=\"0 0 640 480\"><title xmlns=\"\">es-4x3</title><path fill=\"#aa151b\" d=\"M0 0h640v480H0z\"/><path fill=\"#f1bf00\" d=\"M0 120h640v240H0z\"/></svg>"
+  {
+    "name": "Espagne",
+    "flag": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" width=\"640\" height=\"480\" viewBox=\"0 0 640 480\"><path fill=\"#aa151b\" d=\"M0 0h640v480H0z\"/><path fill=\"#f1bf00\" d=\"M0 120h640v240H0z\"/><path fill=\"#aa151b\" d=\"M0 160h640v160H0z\"/><path fill=\"#aa151b\" d=\"M120 192h80v96h-80z\"/><path fill=\"#f1bf00\" d=\"M128 200h64v80h-64z\"/><path fill=\"#c60b1e\" d=\"M136 208h48v64h-48z\"/><path fill=\"#ffcc00\" d=\"M160 216h16v16h-16z\"/></svg>"
   },
   "Luanti Panel": "Panel de Luanti",
   "Sign in to the administration panel": "Iniciar sesión en el panel de administración",
