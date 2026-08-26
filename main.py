@@ -19,9 +19,11 @@ import ssl
 from zeroconf import Zeroconf, ServiceInfo
 import socket
 import getpass
+import argparse
 PASSWORD = "change-me"
-PANEL_VERSION = "3.2.1"
-RELEASE_NOTE = "Implementation of the translation system. \n Added the ability to download and update languages ​​from GitHub."
+PANEL_VERSION = "3.2.2"
+AUTHOR = "Survivalier"
+RELEASE_NOTE = "Implementation of the translation system. \n Added the ability to download and update languages ​​from GitHub. \n Adding a shell argument."
 HOST = "0.0.0.0"
 PORT = 8877
 LUANTI_BIN = "luanti"
@@ -2694,10 +2696,6 @@ def setup_password():
         if len(password) < 4:
             print("The password must contain at least 4 characters.")
             continue
-        confirm = getpass.getpass("Confirm password:  ")
-        if password != confirm:
-            print("Passwords do not match.\n")
-            continue
         break
     with open(__file__, "r", encoding="utf-8") as f:
         source = f.read()
@@ -2712,7 +2710,34 @@ def setup_password():
     print("\nPassword saved.")
     print("Restarting Luanti Panel...\n")
     os.execv(sys.executable, [sys.executable] + sys.argv)
+def logo():
+    ascii_art = fr"""
+     /$$                                       /$$     /$$       /$$$$$$$                               /$$
+    | $$                                      | $$    |__/      | $$__  $$                             | $$
+    | $$       /$$   /$$  /$$$$$$  /$$$$$$$  /$$$$$$   /$$      | $$  \ $$ /$$$$$$  /$$$$$$$   /$$$$$$ | $$
+    | $$      | $$  | $$ |____  $$| $$__  $$|_  $$_/  | $$      | $$$$$$$/|____  $$| $$__  $$ /$$__  $$| $$
+    | $$      | $$  | $$  /$$$$$$$| $$  \ $$  | $$    | $$      | $$____/  /$$$$$$$| $$  \ $$| $$$$$$$$| $$
+    | $$      | $$  | $$ /$$__  $$| $$  | $$  | $$ /$$| $$      | $$      /$$__  $$| $$  | $$| $$_____/| $$
+    | $$$$$$$$|  $$$$$$/|  $$$$$$$| $$  | $$  |  $$$$/| $$      | $$     |  $$$$$$$| $$  | $$|  $$$$$$$| $$
+    |________/ \______/  \_______/|__/  |__/   \___/  |__/      |__/      \_______/|__/  |__/ \_______/|__/ v{PANEL_VERSION} by {AUTHOR}
+  """
+    print(ascii_art)
 def main():
+    parser = argparse.ArgumentParser(description="Luanti Panel")
+    parser.add_argument("--version", action="store_true", help="Show panel version")
+    parser.add_argument("--author", action="store_true", help="Show panel author")
+    parser.add_argument("--setup-password", action="store_true", help="Change the panel password")
+    args = parser.parse_args()
+    if args.version:
+        print(f"Luanti Panel v{PANEL_VERSION}")
+        sys.exit(0)
+    if args.author:
+        print(f"Luanti Panel by {AUTHOR}")
+        sys.exit(0)
+    if args.setup_password:
+        setup_password()
+        sys.exit(0)
+    logo()
     generate_certificate()
     if PASSWORD == "change-me":
       setup_password()
