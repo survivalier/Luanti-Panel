@@ -20,7 +20,8 @@ from zeroconf import Zeroconf, ServiceInfo
 import socket
 import getpass
 PASSWORD = "change-me"
-PANEL_VERSION = "3.1"
+PANEL_VERSION = "3.2.1"
+RELEASE_NOTE = "Implementation of the translation system. \n Added the ability to download and update languages ​​from GitHub."
 HOST = "0.0.0.0"
 PORT = 8877
 LUANTI_BIN = "luanti"
@@ -32,6 +33,8 @@ DEBUG_FILE = os.path.expanduser("~/.minetest/debug.txt")
 EXTRA_ARGS = ["--server", "--world", WORLD_DIR]
 SCRIPT_PATH = os.path.abspath(__file__)
 UPDATE_URL = "https://raw.githubusercontent.com/survivalier/Luanti-Panel/refs/heads/main/main.py"
+LANG_REPO_API_URL = "https://api.github.com/repos/survivalier/Luanti-Panel/contents/lang"
+LANG_REPO_RAW_BASE = "https://raw.githubusercontent.com/survivalier/Luanti-Panel/main/lang/"
 CONSOLE_BUFFER_SIZE = 2000
 PASSWORD_HASH = hashlib.sha256(PASSWORD.encode()).hexdigest()
 SESSIONS = {}
@@ -143,6 +146,11 @@ def extract_panel_version(source_text):
     if not m:
         raise RuntimeError("Unable to determine the version of the downloaded file.")
     return m.group(1)
+def extract_release_note(source_text):
+    """Extracts the value of RELEASE_NOTE from the source code of a panel script.
+Returns an empty string if the field is missing (older panel versions)."""
+    m = re.search(r'^RELEASE_NOTE\s*=\s*"([^"]*)"\s*$', source_text, re.MULTILINE)
+    return m.group(1) if m else ""
 def parse_version_tuple(v):
     """Converts a version string (ex: '1.2.3') to a comparable integer tuple. 
 Non-numeric segments are ignored."""
@@ -155,11 +163,14 @@ def check_for_update():
     """Compares the local version of the panel to the one available on GitHub."""
     source = download_panel_update()
     remote_version = extract_panel_version(source)
+    remote_release_note = extract_release_note(source)
     local_t = parse_version_tuple(PANEL_VERSION)
     remote_t = parse_version_tuple(remote_version)
     return {
         "current_version": PANEL_VERSION,
         "remote_version": remote_version,
+        "current_release_note": RELEASE_NOTE,
+        "remote_release_note": remote_release_note,
         "up_to_date": remote_t <= local_t,
         "update_available": remote_t > local_t,
     }
@@ -227,6 +238,83 @@ def list_available_langs():
             pass
         out.append({"code": code, "name": name, "flag": flag})
     return out
+def get_local_lang_hash(code):
+    """Computes the SHA256 hash of a locally installed language file."""
+    try:
+        full = safe_lang_path(code)
+        if not os.path.isfile(full):
+            return None
+        with open(full, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+    except Exception:
+        return None
+def get_remote_lang_hash(code):
+    """Fetches the SHA256 hash of a language file from GitHub."""
+    try:
+        req = Request(LANG_REPO_RAW_BASE + code + ".json", headers={"User-Agent": "LuantiPanel-LangBrowser"})
+        with urlopen(req, timeout=15) as resp:
+            return hashlib.sha256(resp.read()).hexdigest()
+    except Exception:
+        return None
+def lang_update_available(code):
+    """Checks if a language has an update available on GitHub."""
+    local_hash = get_local_lang_hash(code)
+    if not local_hash:
+        return False
+    remote_hash = get_remote_lang_hash(code)
+    return remote_hash and remote_hash != local_hash
+def list_remote_langs():
+    """Lists the .json language files available in the project's GitHub repository,
+reads each file's _meta (name, flag), and flags which ones are already installed locally."""
+    req = Request(LANG_REPO_API_URL, headers={"User-Agent": "LuantiPanel-LangBrowser", "Accept": "application/vnd.github+json"})
+    try:
+        with urlopen(req, timeout=15) as resp:
+            entries = json.loads(resp.read().decode("utf-8"))
+    except HTTPError as e:
+        raise RuntimeError(f"Download failed (HTTP {e.code}).")
+    except URLError as e:
+        raise RuntimeError(f"Download failed : {e.reason}")
+    installed_codes = {l["code"] for l in list_available_langs()}
+    out = []
+    for entry in entries:
+        fn = entry.get("name", "")
+        if not fn.endswith(".json"):
+            continue
+        code = fn[:-5]
+        name, flag = code, ""
+        try:
+            raw_req = Request(LANG_REPO_RAW_BASE + fn, headers={"User-Agent": "LuantiPanel-LangBrowser"})
+            with urlopen(raw_req, timeout=15) as raw_resp:
+                meta = json.loads(raw_resp.read().decode("utf-8")).get("_meta", {})
+            name = meta.get("name", code)
+            flag = meta.get("flag", "")
+        except Exception:
+            pass
+        is_installed = code in installed_codes
+        has_update = is_installed and lang_update_available(code)
+        out.append({"code": code, "name": name, "flag": flag, "installed": is_installed, "has_update": has_update})
+    out.sort(key=lambda l: l["name"].lower())
+    return out
+def download_remote_lang(code):
+    """Downloads a single language file from the GitHub repository and installs it into LANG_DIR."""
+    full = safe_lang_path(code)
+    req = Request(LANG_REPO_RAW_BASE + code + ".json", headers={"User-Agent": "LuantiPanel-LangBrowser"})
+    try:
+        with urlopen(req, timeout=15) as resp:
+            raw = resp.read()
+    except HTTPError as e:
+        raise RuntimeError(f"Download failed (HTTP {e.code}).")
+    except URLError as e:
+        raise RuntimeError(f"Download failed : {e.reason}")
+    try:
+        json.loads(raw.decode("utf-8"))
+    except Exception:
+        raise RuntimeError("The downloaded file is not valid JSON.")
+    os.makedirs(LANG_DIR, exist_ok=True)
+    tmp_path = full + ".tmp"
+    with open(tmp_path, "wb") as f:
+        f.write(raw)
+    os.replace(tmp_path, full)
 def safe_mod_path(relfolder):
     """Prevents any escape from the MODS_DIR folder (path traversal). 
 Accepts either a standalone mod ("mymod") or a submod of a modpack 
@@ -823,6 +911,19 @@ input:checked + .slider:before{transform:translateX(18px)}
 .version-check .vc-status.available{color:#f0c975}
 .version-check .vc-status.error{color:var(--bad);font-weight:500}
 .version-check .vc-loading{display:flex;align-items:center;gap:8px;color:var(--muted)}
+.update-wrap{display:flex;align-items:flex-start;gap:16px}
+.update-main{flex:1;min-width:0}
+.modal-box.with-notes{max-width:700px}
+.release-notes-btn{background:none;border:none;color:var(--accent);font-size:12.5px;font-weight:600;cursor:pointer;padding:0;margin:0 0 16px;display:inline-flex;align-items:center;gap:5px}
+.release-notes-btn:hover{text-decoration:underline}
+.release-notes-panel{width:230px;flex-shrink:0;background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;font-size:13px}
+.release-notes-panel h4{margin:0 0 10px;font-size:13px;color:#f5f5f5;display:flex;align-items:center;gap:6px}
+.release-notes-panel h4 svg{color:var(--accent)}
+.release-notes-panel .rn-block+.rn-block{margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
+.release-notes-panel .rn-version{color:var(--muted);font-weight:600;font-family:ui-monospace,monospace;margin-bottom:4px}
+.release-notes-panel .rn-text{line-height:1.5;color:#ddd;white-space:pre-wrap}
+.release-notes-panel .rn-empty{color:var(--muted);font-style:italic}
+@media (max-width:640px){.update-wrap{flex-direction:column}.release-notes-panel{width:100%}.modal-box.with-notes{max-width:420px}}
 .vc-spin{width:14px;height:14px;flex-shrink:0;animation:vcspin 1s linear infinite}
 @keyframes vcspin{to{transform:rotate(360deg)}}
 </style></head>
@@ -1022,34 +1123,43 @@ input:checked + .slider:before{transform:translateX(18px)}
   <span id="actionLabel"></span>
 </div>
 <div class="modal-overlay" id="updateModal">
-  <div class="modal-box">
-    <div id="updateFormView">
-      <h3><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Update panel</h3>
-      <div class="version-check" id="versionCheck">
-        <div class="vc-loading">
-          <svg class="vc-spin" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3c4.97 0 9 4.03 9 9"></path></svg>
-          Checking version on GitHub…
+  <div class="modal-box" id="updateModalBox">
+    <div class="update-wrap">
+      <div class="update-main">
+        <div id="updateFormView">
+          <h3><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Update panel</h3>
+          <div class="version-check" id="versionCheck">
+            <div class="vc-loading">
+              <svg class="vc-spin" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3c4.97 0 9 4.03 9 9"></path></svg>
+              Checking version on GitHub…
+            </div>
+          </div>
+          <button type="button" class="release-notes-btn" id="releaseNotesBtn" onclick="toggleReleaseNotes()" style="display:none">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+            <span id="releaseNotesBtnLabel">Release notes</span>
+          </button>
+          <p>This will stop the Luanti server, download the latest panel version from GitHub, and restart it. The update replaces the panel file, so set a new login password.</p>
+          <label for="updatePassword">New panel password</label>
+          <input type="password" id="updatePassword" placeholder="New password">
+          <div class="modal-error" id="updateError"></div>
+          <div class="modal-actions">
+            <button class="btn ghost" id="updateCancelBtn" onclick="closeUpdateModal()">Cancel</button>
+            <button class="btn" id="updateConfirmBtn" onclick="confirmUpdate()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              Download and update
+            </button>
+          </div>
+        </div>
+        <div id="updateProgressView" class="update-progress" style="display:none">
+          <span class="upd-spin-lg">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3c4.97 0 9 4.03 9 9"><animateTransform attributeName="transform" dur="1.5s" repeatCount="indefinite" type="rotate" values="0 12 12;360 12 12"/></path></svg>
+            <svg class="upd-icon-lg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a1 1 0 0 1 1 1v10.586l2.293-2.293a1 1 0 0 1 1.414 1.414l-4 4a1 1 0 0 1-1.414 0l-4-4a1 1 0 1 1 1.414-1.414L11 13.586V3a1 1 0 0 1 1-1M5 17a1 1 0 0 1 1 1v2h12v-2a1 1 0 1 1 2 0v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a1 1 0 0 1 1-1"/></svg>
+          </span>
+          <h4>Update in progress…</h4>
+          <p id="updateStep">Stopping the server, downloading and installing the update…</p>
         </div>
       </div>
-      <p>This will stop the Luanti server, download the latest panel version from GitHub, and restart it. The update replaces the panel file, so set a new login password.</p>
-      <label for="updatePassword">New panel password</label>
-      <input type="password" id="updatePassword" placeholder="New password">
-      <div class="modal-error" id="updateError"></div>
-      <div class="modal-actions">
-        <button class="btn ghost" id="updateCancelBtn" onclick="closeUpdateModal()">Cancel</button>
-        <button class="btn" id="updateConfirmBtn" onclick="confirmUpdate()">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-          Download and update
-        </button>
-      </div>
-    </div>
-    <div id="updateProgressView" class="update-progress" style="display:none">
-      <span class="upd-spin-lg">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3c4.97 0 9 4.03 9 9"><animateTransform attributeName="transform" dur="1.5s" repeatCount="indefinite" type="rotate" values="0 12 12;360 12 12"/></path></svg>
-        <svg class="upd-icon-lg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a1 1 0 0 1 1 1v10.586l2.293-2.293a1 1 0 0 1 1.414 1.414l-4 4a1 1 0 0 1-1.414 0l-4-4a1 1 0 1 1 1.414-1.414L11 13.586V3a1 1 0 0 1 1-1M5 17a1 1 0 0 1 1 1v2h12v-2a1 1 0 1 1 2 0v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a1 1 0 0 1 1-1"/></svg>
-      </span>
-      <h4>Update in progress…</h4>
-      <p id="updateStep">Stopping the server, downloading and installing the update…</p>
+      <div class="release-notes-panel" id="releaseNotesPanel" style="display:none"></div>
     </div>
   </div>
 </div>
@@ -1496,12 +1606,17 @@ async function loadNetwork(){
   }catch(e){}
 }
 let updateInProgress = false;
+let releaseNotesData = null;
 function openUpdateModal(){
   document.getElementById('updateModal').style.display = 'flex';
   document.getElementById('updatePassword').value = '';
   const errEl = document.getElementById('updateError');
   errEl.style.display = 'none';
   errEl.textContent = '';
+  releaseNotesData = null;
+  document.getElementById('releaseNotesBtn').style.display = 'none';
+  document.getElementById('releaseNotesPanel').style.display = 'none';
+  document.getElementById('updateModalBox').classList.remove('with-notes');
   showUpdateFormView();
   checkUpdateVersion();
 }
@@ -1516,6 +1631,8 @@ async function checkUpdateVersion(){
       return;
     }
     document.getElementById('updateDot').style.display = d.update_available ? 'block' : 'none';
+    releaseNotesData = d;
+    document.getElementById('releaseNotesBtn').style.display = 'inline-flex';
     const statusHtml = d.update_available
       ? `<div class="vc-status available"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M5 19q-.425 0-.712-.288T4 18t.288-.712T5 17h1v-7q0-2.075 1.25-3.687T10.5 4.2v-.7q0-.625.438-1.062T12 2t1.063.438T13.5 3.5v.7q2 .5 3.25 2.113T18 10v7h1q.425 0 .713.288T20 18t-.288.713T19 19zm7 3q-.825 0-1.412-.587T10 20h4q0 .825-.587 1.413T12 22"/></svg>New version available</div>`
       : `<div class="vc-status uptodate"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="m9.55 15.15l8.475-8.475q.3-.3.7-.3t.7.3t.3.713t-.3.712l-9.175 9.2q-.3.3-.7.3t-.7-.3L4.55 13q-.3-.3-.288-.712t.313-.713t.713-.3t.712.3z"/></svg>The panel is up to date</div>`;
@@ -1526,6 +1643,36 @@ async function checkUpdateVersion(){
   }catch(e){
     el.innerHTML = `<div class="vc-status error"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M2.725 21q-.275 0-.5-.137t-.35-.363t-.137-.488t.137-.512l9.25-16q.15-.25.388-.375T12 3t.488.125t.387.375l9.25 16q.15.25.138.513t-.138.487t-.35.363t-.5.137zm9.988-3.287Q13 17.425 13 17t-.288-.712T12 16t-.712.288T11 17t.288.713T12 18t.713-.288m0-3Q13 14.425 13 14v-3q0-.425-.288-.712T12 10t-.712.288T11 11v3q0 .425.288.713T12 15t.713-.288"/></svg>Unable to check the version (network problem).</div>`;
   }
+}
+function toggleReleaseNotes(){
+  const panel = document.getElementById('releaseNotesPanel');
+  const box = document.getElementById('updateModalBox');
+  const btnLabel = document.getElementById('releaseNotesBtnLabel');
+  const showing = panel.style.display !== 'none';
+  if(showing){
+    panel.style.display = 'none';
+    box.classList.remove('with-notes');
+    btnLabel.textContent = 'Release notes';
+  }else{
+    renderReleaseNotes();
+    panel.style.display = 'block';
+    box.classList.add('with-notes');
+    btnLabel.textContent = 'Hide release notes';
+  }
+}
+function renderReleaseNotes(){
+  const panel = document.getElementById('releaseNotesPanel');
+  const d = releaseNotesData;
+  if(!d){
+    panel.innerHTML = `<h4>Release notes</h4><div class="rn-empty">No information available.</div>`;
+    return;
+  }
+  let html = `<h4><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>Release notes</h4>`;
+  html += `<div class="rn-block"><div class="rn-version">v${escapeHtml(d.current_version)} (installed)</div><div class="rn-text">${escapeHtml(d.current_release_note || '—')}</div></div>`;
+  if(d.update_available){
+    html += `<div class="rn-block"><div class="rn-version">v${escapeHtml(d.remote_version)} (available)</div><div class="rn-text">${escapeHtml(d.remote_release_note || '—')}</div></div>`;
+  }
+  panel.innerHTML = html;
 }
 function closeUpdateModal(){
   if(updateInProgress) return;
@@ -1783,10 +1930,14 @@ I18N_JS = r"""
     const panel = document.createElement("div");
     panel.id = "i18n-panel";
     panel.style.cssText =
-      "position:absolute;bottom:42px;left:0;min-width:180px;max-height:280px;" +
-      "overflow-y:auto;background:#171a22;border:1px solid #262b36;" +
+      "position:absolute;bottom:42px;left:0;min-width:180px;max-height:320px;" +
+      "background:#171a22;border:1px solid #262b36;" +
       "border-radius:12px;padding:6px;box-shadow:0 12px 32px rgba(0,0,0,.45);" +
-      "display:none;flex-direction:column;gap:2px;";
+      "display:none;flex-direction:column;";
+    const listWrap = document.createElement("div");
+    listWrap.id = "i18n-lang-list";
+    listWrap.style.cssText =
+      "overflow-y:auto;max-height:260px;display:flex;flex-direction:column;gap:2px;";
     function makeOption(code, label, flag){
       const opt = document.createElement("button");
       opt.type = "button";
@@ -1815,6 +1966,12 @@ I18N_JS = r"""
       opt.addEventListener("mouseleave", ()=>{ if(opt.dataset.code !== (currentLang()||"")) opt.style.background = "none"; });
       return opt;
     }
+    if (!langs.length) {
+      const empty = document.createElement("div");
+      empty.textContent = "No languages installed";
+      empty.style.cssText = "color:#8a8f98;font-size:12.5px;padding:9px 10px;";
+      listWrap.appendChild(empty);
+    }
     langs.forEach(l=>{
       const opt = makeOption(l.code, l.name, l.flag);
       opt.addEventListener("click", ()=>{
@@ -1823,11 +1980,21 @@ I18N_JS = r"""
         closePanel();
         updateActiveOption();
       });
-      panel.appendChild(opt);
+      listWrap.appendChild(opt);
     });
+    panel.appendChild(listWrap);
+    const isAdminPage = !!document.getElementById("updateModal");
+    if (isAdminPage) {
+      const sep = document.createElement("div");
+      sep.style.cssText = "height:1px;background:#262b36;margin:6px 2px;flex-shrink:0;";
+      panel.appendChild(sep);
+      const dlBtn = buildDownloadButton();
+      dlBtn.addEventListener("click", (e)=>{ e.stopPropagation(); closePanel(); openDownloadPanel(); });
+      panel.appendChild(dlBtn);
+    }
     function updateActiveOption(){
       const active = currentLang() || "";
-      panel.querySelectorAll("button[data-code]").forEach(o=>{
+      listWrap.querySelectorAll("button[data-code]").forEach(o=>{
         const isActive = o.dataset.code === active;
         o.style.background = isActive ? "#1e2b45" : "none";
         o.style.color = isActive ? "#7aa2ff" : "#e6e6e6";
@@ -1855,18 +2022,213 @@ I18N_JS = r"""
     document.body.appendChild(wrap);
     updateActiveOption();
   }
+  function buildDownloadButton(){
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = "i18n-download-btn";
+    btn.style.cssText =
+      "display:flex;align-items:center;gap:10px;width:100%;text-align:left;" +
+      "background:none;border:0;color:#7aa2ff;padding:9px 10px;border-radius:8px;" +
+      "cursor:pointer;font-size:13.5px;font-weight:600;transition:background .12s;flex-shrink:0;";
+    const iconSpan = document.createElement("span");
+    iconSpan.style.cssText =
+      "display:flex;align-items:center;justify-content:center;width:22px;flex-shrink:0;";
+    iconSpan.innerHTML =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><title xmlns="">download-rounded</title><path fill="currentColor" d="M11.625 15.513q-.175-.063-.325-.213l-3.6-3.6q-.3-.3-.288-.7t.288-.7q.3-.3.713-.312t.712.287L11 12.15V5q0-.425.288-.712T12 4t.713.288T13 5v7.15l1.875-1.875q.3-.3.713-.288t.712.313q.275.3.288.7t-.288.7l-3.6 3.6q-.15.15-.325.213t-.375.062t-.375-.062M6 20q-.825 0-1.412-.587T4 18v-2q0-.425.288-.712T5 15t.713.288T6 16v2h12v-2q0-.425.288-.712T19 15t.713.288T20 16v2q0 .825-.587 1.413T18 20z"/></svg>';
+    const labelSpan = document.createElement("span");
+    labelSpan.textContent = "Download languages";
+    btn.appendChild(iconSpan);
+    btn.appendChild(labelSpan);
+    btn.addEventListener("mouseenter", ()=>{ btn.style.background = "#1e222c"; });
+    btn.addEventListener("mouseleave", ()=>{ btn.style.background = "none"; });
+    return btn;
+  }
+  let downloadOverlay = null;
+  function openDownloadPanel(){
+    const switcherPanel = document.getElementById("i18n-panel");
+    if (switcherPanel) switcherPanel.style.display = "none";
+    if (!downloadOverlay) {
+      downloadOverlay = document.createElement("div");
+      downloadOverlay.id = "i18n-download-overlay";
+      downloadOverlay.style.cssText =
+        "position:fixed;inset:0;background:rgba(5,6,10,.68);backdrop-filter:blur(2px);" +
+        "display:flex;align-items:center;justify-content:center;z-index:10000;padding:16px;" +
+        "font-family:-apple-system,system-ui,'Segoe UI',sans-serif;";
+      const box = document.createElement("div");
+      box.style.cssText =
+        "background:#171a22;border:1px solid #262b36;border-radius:14px;padding:20px;" +
+        "width:100%;max-width:360px;max-height:80vh;display:flex;flex-direction:column;" +
+        "box-shadow:0 20px 60px rgba(0,0,0,.55);";
+      const header = document.createElement("div");
+      header.style.cssText = "display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;";
+      const title = document.createElement("h3");
+      title.textContent = "Download languages";
+      title.style.cssText = "margin:0;font-size:15px;color:#f5f5f5;font-weight:700;";
+      const closeBtn = document.createElement("button");
+      closeBtn.type = "button";
+      closeBtn.innerHTML = "&times;";
+      closeBtn.style.cssText = "background:none;border:0;color:#8a8f98;font-size:22px;line-height:1;cursor:pointer;padding:0 4px;";
+      closeBtn.addEventListener("click", closeDownloadPanel);
+      header.appendChild(title);
+      header.appendChild(closeBtn);
+      const list = document.createElement("div");
+      list.id = "i18n-download-list";
+      list.style.cssText = "overflow-y:auto;display:flex;flex-direction:column;gap:2px;min-height:60px;";
+      box.appendChild(header);
+      box.appendChild(list);
+      downloadOverlay.appendChild(box);
+      downloadOverlay.addEventListener("click", (e)=>{ if (e.target === downloadOverlay) closeDownloadPanel(); });
+      document.body.appendChild(downloadOverlay);
+    }
+    downloadOverlay.style.display = "flex";
+    loadRemoteLangs();
+  }
+  function closeDownloadPanel(){
+    if (downloadOverlay) downloadOverlay.style.display = "none";
+  }
+  async function loadRemoteLangs(){
+    const list = document.getElementById("i18n-download-list");
+    list.innerHTML = '<div style="color:#8a8f98;font-size:13px;padding:10px 2px;">Loading…</div>';
+    try {
+      const res = await fetch("/api/lang/remote");
+      const data = await res.json();
+      if (!res.ok) {
+        list.innerHTML = `<div style="color:#ff6b6b;font-size:13px;padding:10px 2px;">${(data && data.error) || "Unable to load the list."}</div>`;
+        return;
+      }
+      if (!data.length) {
+        list.innerHTML = '<div style="color:#8a8f98;font-size:13px;padding:10px 2px;">No languages found.</div>';
+        return;
+      }
+      list.innerHTML = "";
+      data.forEach(l => list.appendChild(buildRemoteLangRow(l)));
+    } catch(e){
+      list.innerHTML = '<div style="color:#ff6b6b;font-size:13px;padding:10px 2px;">Unable to load the list.</div>';
+    }
+  }
+  function buildRemoteLangRow(l){
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;align-items:center;gap:10px;padding:8px 6px;border-radius:8px;";
+    const flagSpan = document.createElement("span");
+    flagSpan.style.cssText =
+      "display:flex;align-items:center;justify-content:center;width:22px;" +
+      "flex-shrink:0;line-height:1;border-radius:2px;overflow:hidden;";
+    if (l.flag && l.flag.trim().startsWith("<svg")) {
+      flagSpan.innerHTML = l.flag;
+    } else if (l.flag) {
+      flagSpan.style.fontSize = "16px";
+      flagSpan.textContent = l.flag;
+    }
+    const textWrap = document.createElement("div");
+    textWrap.style.cssText = "flex:1;min-width:0;display:flex;flex-direction:column;";
+    const nameEl = document.createElement("span");
+    nameEl.textContent = l.name;
+    nameEl.style.cssText = "color:#e6e6e6;font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+    
+    textWrap.appendChild(nameEl);
+
+    if (l.author) {
+      const authorEl = document.createElement("span");
+      authorEl.textContent = "by " + l.author;
+      authorEl.style.cssText = "color:#6c7280;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+      textWrap.appendChild(authorEl);
+    }
+
+    const codeEl = document.createElement("span");
+    codeEl.textContent = l.code;
+    codeEl.style.cssText = "color:#8a8f98;font-size:11.5px;font-family:ui-monospace,monospace;";
+    textWrap.appendChild(codeEl);
+
+    row.appendChild(flagSpan);
+    row.appendChild(textWrap);
+    if (l.has_update) {
+      const updateBtn = document.createElement("button");
+      updateBtn.type = "button";
+      updateBtn.title = "Update";
+      updateBtn.style.cssText =
+        "background:#1e222c;border:1px solid #262b36;color:#f0c975;width:28px;height:28px;" +
+        "border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
+      updateBtn.innerHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><title xmlns="">upgrade-rounded</title><path fill="currentColor" d="M8 20q-.425 0-.712-.288T7 19t.288-.712T8 18h8q.425 0 .713.288T17 19t-.288.713T16 20zm3.288-4.288Q11 15.425 11 15V7.825L9.1 9.7q-.275.275-.687.288T7.7 9.7q-.275-.275-.275-.7t.275-.7l3.6-3.6q.15-.15.325-.212T12 4.425t.375.063t.325.212l3.6 3.6q.275.275.288.688T16.3 9.7q-.275.275-.7.275t-.7-.275L13 7.825V15q0 .425-.287.713T12 16t-.712-.288"/></svg>';
+      updateBtn.addEventListener("click", async ()=>{
+        updateBtn.disabled = true;
+        updateBtn.style.opacity = "0.5";
+        try {
+          const res = await fetch("/api/lang/download", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({code: l.code})
+          });
+          const d = await res.json().catch(()=>({}));
+          if (!res.ok) throw new Error(d.error || "Update failed.");
+          row.remove();
+          refreshInstalledLangs();
+        } catch(e){
+          updateBtn.disabled = false;
+          updateBtn.style.opacity = "1";
+          updateBtn.title = e.message || "Update failed.";
+        }
+      });
+      row.appendChild(updateBtn);
+    } else if (l.installed) {
+      const badge = document.createElement("span");
+      badge.textContent = "Installed";
+      badge.style.cssText = "color:#3ecf8e;font-size:11.5px;font-weight:600;flex-shrink:0;";
+      row.appendChild(badge);
+    } else {
+      const dlBtn = document.createElement("button");
+      dlBtn.type = "button";
+      dlBtn.title = "Download";
+      dlBtn.style.cssText =
+        "background:#1e222c;border:1px solid #262b36;color:#7aa2ff;width:28px;height:28px;" +
+        "border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
+      dlBtn.innerHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M11.625 15.513q-.175-.063-.325-.213l-3.6-3.6q-.3-.3-.288-.7t.288-.7q.3-.3.713-.312t.712.287L11 12.15V5q0-.425.288-.712T12 4t.713.288T13 5v7.15l1.875-1.875q.3-.3.713-.288t.712.313q.275.3.288.7t-.288.7l-3.6 3.6q-.15.15-.325.213t-.375.062t-.375-.062M6 20q-.825 0-1.412-.587T4 18v-2q0-.425.288-.712T5 15t.713.288T6 16v2h12v-2q0-.425.288-.712T19 15t.713.288T20 16v2q0 .825-.587 1.413T18 20z"/></svg>';
+      dlBtn.addEventListener("click", async ()=>{
+        dlBtn.disabled = true;
+        dlBtn.style.opacity = "0.5";
+        try {
+          const res = await fetch("/api/lang/download", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({code: l.code})
+          });
+          const d = await res.json().catch(()=>({}));
+          if (!res.ok) throw new Error(d.error || "Download failed.");
+          row.remove();
+          refreshInstalledLangs();
+        } catch(e){
+          dlBtn.disabled = false;
+          dlBtn.style.opacity = "1";
+          dlBtn.title = e.message || "Download failed.";
+        }
+      });
+      row.appendChild(dlBtn);
+    }
+    return row;
+  }
+  async function refreshInstalledLangs(){
+    try {
+      const res = await fetch("/api/lang/list");
+      const langs = res.ok ? await res.json() : [];
+      const existing = document.getElementById("i18n-switcher");
+      if (existing) existing.remove();
+      buildSwitcher(langs);
+    } catch(e){}
+  }
   document.addEventListener("DOMContentLoaded", async ()=>{
     const lang = currentLang();
     if (lang) {
       load(lang);
     }
+    let langs = [];
     try {
       const res = await fetch("/api/lang/list");
-      const langs = res.ok ? await res.json() : [];
-      if (langs.length) {
-        buildSwitcher(langs);
-      }
+      langs = res.ok ? await res.json() : [];
     } catch(e){}
+    if (langs.length || document.getElementById("updateModal")) {
+      buildSwitcher(langs);
+    }
   });
   new MutationObserver(muts=>{
     for (const m of muts) {
@@ -2020,6 +2382,12 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
         elif path == "/api/lang/list":
             self._send_json(list_available_langs())
+        elif path == "/api/lang/remote":
+            if not self._require_auth(): return
+            try:
+                self._send_json(list_remote_langs())
+            except Exception as e:
+                self._send_json({"error": str(e)}, 400)
         elif path.startswith("/lang/") and path.endswith(".json"):
             try:
                 code = path[len("/lang/"):-len(".json")]
@@ -2208,6 +2576,14 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/debug/clear":
             try:
                 clear_debug_file()
+                self._send_json({"ok": True})
+            except Exception as e:
+                self._send_json({"error": str(e)}, 400)
+        elif path == "/api/lang/download":
+            data = self._get_json()
+            code = data.get("code", "")
+            try:
+                download_remote_lang(code)
                 self._send_json({"ok": True})
             except Exception as e:
                 self._send_json({"error": str(e)}, 400)
