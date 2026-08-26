@@ -14,6 +14,7 @@
   "Current version": "Versión actual",
   "GitHub version": "Versión de GitHub",
   "The panel is up to date": "El panel está actualizado",
+  "Release notes": "Notas de la versión",
   "This will stop the Luanti server, download the latest panel version from GitHub, and restart it. The update replaces the panel file, so set a new login password.": "Esto detendrá el servidor Luanti, descargará la última versión del panel desde GitHub y lo reiniciará. La actualización reemplazará el archivo del panel, por lo que deberás establecer una nueva contraseña de inicio de sesión.",
   "New panel password": "Nueva contraseña del panel",
   "New password": "Nueva contraseña",
